@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Fiverr AI Assistant</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>Fiverr AI Assistant</h1>
+    </div>
+    
+    <div class="action-buttons">
+      <button id="goToFiverr" class="btn primary">Go to Fiverr</button>
+      <button id="viewChatHistory" class="btn">View Chat History</button>
+    </div>
+    
+    <div class="settings-panel">
+      <h2>Settings</h2>
+      <div class="setting-item">
+        <label for="apiKey">OpenAI API Key:</label>
+        <input type="password" id="apiKey" placeholder="Enter your OpenAI API key">
+        <small class="hint">Double-click to reveal/hide</small>
+      </div>
+      <div class="setting-item">
+        <label for="enableAI">Enable AI Features:</label>
+        <input type="checkbox" id="enableAI" checked>
+      </div>
+      <button id="saveSettings" class="btn">Save Settings</button>
+    </div>
+    
+    <div class="chat-history">
+      <h2>Recent Messages</h2>
+      <div id="recentMessages" class="recent-messages">
+        <!-- Messages will be loaded here -->
+        <div class="no-messages">No recent messages</div>
+      </div>
+      <button id="viewFullChat" class="btn">View Full Chat History</button>
+    </div>
+    
+    <div class="footer">
+      <p>Set your OpenAI API key above to enable AI features. The assistant will appear when you visit Fiverr's chat pages.</p>
+    </div>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html> 

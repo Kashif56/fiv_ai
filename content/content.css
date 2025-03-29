@@ -1,0 +1,262 @@
+/* Fiverr AI Chat Assistant CSS */
+
+.fiv-ai-floating-assistant {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  width: 340px;
+  background-color: #fff;
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  z-index: 2147483647; /* Maximum z-index value */
+  overflow: hidden;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  transition: all 0.3s ease;
+  border: 3px solid #1dbf73;
+  opacity: 1;
+  display: block !important;
+  visibility: visible !important;
+  animation: fiv-ai-bounce-in 0.5s ease;
+  transform-origin: bottom right;
+}
+
+/* Animations */
+@keyframes fiv-ai-bounce-in {
+  0% { transform: scale(0.5); opacity: 0; }
+  60% { transform: scale(1.1); }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+.fiv-ai-closing {
+  animation: fiv-ai-fade-out 0.3s ease forwards;
+}
+
+@keyframes fiv-ai-fade-out {
+  0% { transform: scale(1); opacity: 1; }
+  100% { transform: scale(0.5); opacity: 0; }
+}
+
+.fiv-ai-floating-assistant:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+}
+
+.fiv-ai-header {
+  background-color: #1dbf73; /* Fiverr green */
+  color: white;
+  padding: 12px 15px;
+  font-weight: bold;
+  cursor: move;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  user-select: none;
+  font-size: 16px;
+  letter-spacing: 0.5px;
+}
+
+.fiv-ai-controls {
+  display: flex;
+  gap: 8px;
+}
+
+.fiv-ai-controls button {
+  background: none;
+  border: none;
+  color: white;
+  cursor: pointer;
+  font-size: 18px;
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+}
+
+.fiv-ai-controls button:hover {
+  background-color: rgba(255, 255, 255, 0.3);
+  transform: scale(1.1);
+}
+
+.fiv-ai-content {
+  padding: 18px;
+  background-color: white;
+  transition: max-height 0.3s ease;
+  overflow: hidden;
+  max-height: 500px; /* Start expanded */
+}
+
+.fiv-ai-minimized .fiv-ai-content {
+  max-height: 0;
+}
+
+.fiv-ai-message-summary,
+.fiv-ai-reply-options,
+.fiv-ai-custom-reply {
+  margin-bottom: 18px;
+}
+
+.fiv-ai-message-summary h3,
+.fiv-ai-reply-options h3 {
+  font-size: 14px;
+  color: #444;
+  margin-bottom: 10px;
+  font-weight: 600;
+}
+
+.fiv-ai-summary-text {
+  padding: 12px;
+  background-color: #f9f9f9;
+  border-radius: 8px;
+  font-size: 14px;
+  color: #333;
+  border: 1px solid #eee;
+  line-height: 1.4;
+}
+
+/* Carousel container */
+.fiv-ai-carousel-container {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  position: relative;
+  margin-bottom: 10px;
+}
+
+.fiv-ai-carousel {
+  scroll-snap-type: x mandatory;
+  overflow-x: auto;
+  overflow-y: hidden;
+  display: flex;
+  width: 100%;
+  scrollbar-width: none; /* Hide scrollbar for Firefox */
+  -ms-overflow-style: none; /* Hide scrollbar for IE and Edge */
+}
+
+.fiv-ai-carousel::-webkit-scrollbar {
+  display: none; /* Hide scrollbar for Chrome, Safari and Opera */
+}
+
+.fiv-ai-suggestions {
+  display: flex;
+  gap: 15px;
+  padding: 5px 0;
+  width: max-content;
+}
+
+.fiv-ai-suggestion {
+  padding: 12px;
+  background-color: #f0f7f4;
+  border: 1px solid #d0e9d6;
+  border-radius: 8px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  line-height: 1.4;
+  width: 280px !important;
+  min-width: 280px !important;
+  max-width: 280px !important;
+  flex-shrink: 0;
+  scroll-snap-align: start;
+  white-space: normal;
+  word-break: break-word;
+  overflow-wrap: break-word;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  height: auto;
+}
+
+.fiv-ai-suggestion:hover {
+  background-color: #e0f2e9;
+  transform: translateY(-3px);
+  box-shadow: 0 4px 8px rgba(29, 191, 115, 0.15);
+}
+
+.fiv-ai-suggestion-text {
+  flex: 1;
+  line-height: 1.5;
+}
+
+.fiv-ai-send-btn {
+  background-color: #1dbf73;
+  color: white;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: bold;
+  font-size: 13px;
+  transition: all 0.2s ease;
+  align-self: flex-end;
+  width: 100%;
+  text-align: center;
+  display: block;
+  margin-top: 5px;
+}
+
+.fiv-ai-send-btn:hover {
+  background-color: #19a463;
+  transform: translateY(-2px);
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+}
+
+.fiv-ai-suggestion-placeholder {
+  padding: 20px 15px;
+  text-align: center;
+  color: #888;
+  font-size: 14px;
+  background-color: #f9f9f9;
+  border-radius: 8px;
+  border: 1px dashed #ddd;
+  min-width: 280px;
+  width: 100%;
+}
+
+/* Pulse animation for new messages */
+.fiv-ai-pulse {
+  animation: fiv-ai-pulse-animation 1s ease-out;
+}
+
+@keyframes fiv-ai-pulse-animation {
+  0% { box-shadow: 0 0 0 0 rgba(29, 191, 115, 0.7); }
+  70% { box-shadow: 0 0 0 15px rgba(29, 191, 115, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(29, 191, 115, 0); }
+}
+
+.fiv-ai-prev, .fiv-ai-next {
+  background-color: #1dbf73;
+  color: white;
+  border: none;
+  border-radius: 50%;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  cursor: pointer;
+  font-size: 18px;
+  font-weight: bold;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+  z-index: 10;
+  margin: 0 5px;
+  position: absolute;
+}
+
+.fiv-ai-prev {
+  left: -15px;
+}
+
+.fiv-ai-next {
+  right: -15px;
+}
+
+.fiv-ai-prev:hover,
+.fiv-ai-next:hover {
+  background-color: #19a463;
+  transform: scale(1.1);
+} 
