@@ -6,6 +6,10 @@ let floatingAssistant = null;
 let apiKey = '';
 let enableAI = true;
 let messageProcessingTimeout;
+// Track message processing status
+let processedMessages = new Set();
+let currentlyProcessingMessage = null;
+let messageProcessingDebounceTimer = null;
 
 // Initialize when the page is fully loaded
 window.addEventListener('load', initialize);
@@ -37,8 +41,26 @@ function initialize() {
     setTimeout(() => {
       processExistingMessages();
     }, 1000);
+    
+    // Set up periodic cache cleanup for processed messages
+    setInterval(cleanupProcessedMessagesCache, 60000); // Cleanup every minute
   } else {
     console.log('Fiverr AI Assistant: Not a chat page, minimal initialization');
+  }
+}
+
+// Clean up the processed messages cache to prevent memory issues
+function cleanupProcessedMessagesCache() {
+  // If we have too many processed messages in the cache, clear older ones
+  // Keep the cache at a reasonable size (max 100 messages)
+  if (processedMessages.size > 100) {
+    console.log(`Fiverr AI Assistant: Cleaning up processed messages cache (${processedMessages.size} items)`);
+    // Convert set to array, keep only the last 50 entries
+    const messagesToKeep = Array.from(processedMessages).slice(-50);
+    // Clear the set and add back the messages to keep
+    processedMessages.clear();
+    messagesToKeep.forEach(hash => processedMessages.add(hash));
+    console.log(`Fiverr AI Assistant: Processed messages cache reduced to ${processedMessages.size} items`);
   }
 }
 
@@ -105,7 +127,7 @@ function isFiverrChatPage() {
 function createFloatingAssistant() {
   // If already exists, return
   if (document.getElementById('fiv-ai-floating-assistant')) {
-    return;
+    return document.getElementById('fiv-ai-floating-assistant');
   }
   
   // Create assistant container
@@ -152,6 +174,15 @@ function createFloatingAssistant() {
   
   document.body.appendChild(assistant);
   
+  // Create restore button (hidden initially)
+  const restoreButton = document.createElement('div');
+  restoreButton.id = 'fiv-ai-restore-btn';
+  restoreButton.className = 'fiv-ai-restore-btn';
+  restoreButton.title = 'Restore Fiverr AI Assistant';
+  restoreButton.innerHTML = `<span>Fiverr AI</span>`;
+  restoreButton.style.display = 'none';
+  document.body.appendChild(restoreButton);
+  
   // Set the global floatingAssistant variable
   floatingAssistant = assistant;
   
@@ -161,22 +192,88 @@ function createFloatingAssistant() {
   // Set up carousel buttons
   setupCarouselButtons();
   
-  // Add minimize button functionality
+  // Add minimize button functionality with a direct click handler
   const minimizeBtn = document.getElementById('fiv-ai-minimize-btn');
   if (minimizeBtn) {
-    minimizeBtn.addEventListener('click', () => {
-      assistant.classList.toggle('fiv-ai-minimized');
+    // Remove any existing event listeners
+    const newMinimizeBtn = minimizeBtn.cloneNode(true);
+    minimizeBtn.parentNode.replaceChild(newMinimizeBtn, minimizeBtn);
+    
+    // Add fresh event listener
+    newMinimizeBtn.addEventListener('click', function(e) {
+      e.stopPropagation(); // Prevent event bubbling
+      console.log('Minimize button clicked');
+      
+      // Add minimized class to start animation
+      assistant.classList.add('fiv-ai-minimized');
+      
+      // Explicitly hide the content
+      const content = assistant.querySelector('.fiv-ai-content');
+      if (content) {
+        content.style.maxHeight = '0';
+        content.style.opacity = '0';
+        content.style.paddingTop = '0';
+        content.style.paddingBottom = '0';
+      }
+      
+      // Get position for restore button
+      const rect = assistant.getBoundingClientRect();
+      restoreButton.style.bottom = window.innerHeight - rect.bottom + 'px';
+      restoreButton.style.right = window.innerWidth - rect.right + 'px';
+      
+      // Hide assistant and show restore button after animation completes
+      setTimeout(() => {
+        console.log('Hiding assistant and showing restore button');
+        assistant.style.display = 'none';
+        restoreButton.style.display = 'flex';
+      }, 300);
     });
+  } else {
+    console.error('Fiverr AI Assistant: Minimize button not found');
   }
+  
+  // Add restore button functionality
+  restoreButton.addEventListener('click', function(e) {
+    e.stopPropagation(); // Prevent event bubbling
+    console.log('Restore button clicked');
+    
+    // Hide restore button
+    restoreButton.style.display = 'none';
+    
+    // Show assistant but keep it minimized initially
+    assistant.style.opacity = '0';
+    assistant.style.transform = 'scale(0.9)';
+    assistant.style.display = 'block';
+    
+    // Force browser to recognize the element is now visible before applying transition
+    setTimeout(() => {
+      // Remove minimized class and reset any manually set styles
+      assistant.classList.remove('fiv-ai-minimized');
+      assistant.style.opacity = '';
+      assistant.style.transform = '';
+      
+      // Ensure content is visible
+      const content = assistant.querySelector('.fiv-ai-content');
+      if (content) {
+        content.style.display = 'block';
+        content.style.maxHeight = '500px';
+        content.style.opacity = '1';
+      }
+      
+      console.log('Assistant restored from minimized state');
+    }, 50);
+  });
   
   // Add close button functionality
   const closeBtn = document.getElementById('fiv-ai-close-btn');
   if (closeBtn) {
-    closeBtn.addEventListener('click', () => {
+    closeBtn.addEventListener('click', function() {
       assistant.classList.add('fiv-ai-closing');
       setTimeout(() => {
         assistant.style.display = 'none';
         assistant.classList.remove('fiv-ai-closing');
+        // Also hide restore button if it's visible
+        restoreButton.style.display = 'none';
       }, 300);
     });
   }
@@ -184,59 +281,337 @@ function createFloatingAssistant() {
   // Add all event listeners to the assistant
   addFloatingAssistantListeners(assistant);
   
+  // Make assistant draggable
+  setupDragging();
+  
   return assistant;
 }
 
+// Add required styles for the assistant
+function addAssistantStyles() {
+  const styleEl = document.createElement('style');
+  styleEl.id = 'fiv-ai-assistant-styles';
+  styleEl.textContent = `
+    /* Floating AI assistant styles */
+    .fiv-ai-floating-assistant {
+      position: fixed;
+      z-index: 9999;
+      width: 380px;
+      background-color: #fff;
+      border-radius: 8px;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+      font-family: 'Macan', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+      font-size: 14px;
+      color: #404145;
+      overflow: hidden;
+      transition: opacity 0.3s, transform 0.3s, max-height 0.3s;
+      display: none;
+    }
 
+    .fiv-ai-closing {
+      opacity: 0;
+      transform: scale(0.9);
+    }
+    
+    .fiv-ai-minimized {
+      opacity: 0;
+      transform: scale(0.9);
+      max-height: 60px; /* Just enough to show the header */
+      overflow: hidden;
+    }
 
+    .fiv-ai-pulse {
+      animation: fiv-ai-pulse-animation 1s;
+    }
+
+    @keyframes fiv-ai-pulse-animation {
+      0% { box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2); }
+      50% { box-shadow: 0 4px 25px rgba(29, 191, 115, 0.6); }
+      100% { box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2); }
+    }
+
+    /* Restore button styles */
+    .fiv-ai-restore-btn {
+      position: fixed;
+      z-index: 9999;
+      bottom: 20px;
+      right: 20px;
+      background-color: #1dbf73;
+      color: white;
+      padding: 12px 16px;
+      border-radius: 30px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+      cursor: pointer;
+      font-family: 'Macan', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+      font-size: 14px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s ease;
+    }
+
+    .fiv-ai-restore-btn:hover {
+      background-color: #19a463;
+      transform: translateY(-2px);
+      box-shadow: 0 6px 14px rgba(0, 0, 0, 0.25);
+    }
+
+    .fiv-ai-restore-btn span {
+      display: flex;
+      align-items: center;
+    }
+
+    .fiv-ai-restore-btn span:before {
+      content: '+';
+      margin-right: 8px;
+      font-size: 16px;
+      font-weight: bold;
+    }
+
+    .fiv-ai-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 16px 20px;
+      background-color: #1dbf73; /* Fiverr green */
+      color: white;
+      cursor: move;
+      font-weight: 600;
+      font-size: 16px;
+    }
+
+    .fiv-ai-controls {
+      display: flex;
+      gap: 10px;
+    }
+
+    .fiv-ai-controls button {
+      background: none;
+      border: none;
+      color: white;
+      font-size: 18px;
+      cursor: pointer;
+      width: 28px;
+      height: 28px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 4px;
+    }
+
+    .fiv-ai-controls button:hover {
+      background-color: rgba(255, 255, 255, 0.2);
+    }
+
+    .fiv-ai-content {
+      padding: 20px;
+      max-height: 500px;
+      transition: all 0.3s ease-in-out;
+      overflow: hidden;
+    }
+
+    .fiv-ai-minimized .fiv-ai-content {
+      max-height: 0 !important;
+      padding-top: 0 !important;
+      padding-bottom: 0 !important;
+      opacity: 0 !important;
+      overflow: hidden !important;
+      margin: 0 !important;
+      visibility: hidden;
+    }
+
+    .fiv-ai-message-summary {
+      margin-bottom: 20px;
+    }
+
+    .fiv-ai-message-summary h3 {
+      font-size: 18px;
+      margin: 0 0 12px 0;
+      color: #404145;
+      font-weight: 600;
+    }
+
+    .fiv-ai-summary-text {
+      background-color: #f5f5f5;
+      padding: 16px;
+      border-radius: 8px;
+      margin: 0;
+      font-size: 15px;
+      line-height: 1.5;
+      max-height: 200px;
+      overflow-y: auto;
+    }
+    
+    .fiv-ai-original-message {
+      margin-bottom: 12px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid #ddd;
+      color: #62646a;
+      font-style: italic;
+      line-height: 1.5;
+    }
+    
+    .fiv-ai-simplified {
+      color: #404145;
+      line-height: 1.5;
+    }
+    
+    .fiv-ai-simplified strong {
+      color: #1dbf73;
+      font-weight: 600;
+    }
+    
+    .fiv-ai-summary-text strong {
+      color: #1dbf73;
+      font-weight: 600;
+    }
+    
+    .fiv-ai-summary-text em {
+      color: #62646a;
+      font-style: italic;
+    }
+
+    .fiv-ai-reply-options h3 {
+      font-size: 18px;
+      margin: 0 0 12px 0;
+      color: #404145;
+      font-weight: 600;
+    }
+
+    .fiv-ai-carousel-container {
+      position: relative;
+      width: 100%;
+      padding: 0 24px;
+    }
+
+    .fiv-ai-carousel {
+      width: 100%;
+      margin: 0 auto;
+      overflow-x: auto;
+      scroll-behavior: smooth;
+      scroll-snap-type: x mandatory;
+      scrollbar-width: thin;
+      scrollbar-color: #ddd #f5f5f5;
+      -webkit-overflow-scrolling: touch;
+      -ms-overflow-style: none;  /* Hide scrollbar IE and Edge */
+      scrollbar-width: none;  /* Hide scrollbar Firefox */
+    }
+    
+    .fiv-ai-carousel::-webkit-scrollbar {
+      display: none; /* Hide scrollbar Chrome, Safari, Opera */
+    }
+
+    .fiv-ai-suggestions {
+      display: flex;
+      gap: 15px;
+      padding: 5px 0;
+      width: 100%;
+    }
+
+    .fiv-ai-suggestion {
+      flex: 0 0 100%;
+      background-color: #f5f5f5;
+      border-radius: 8px;
+      padding: 16px;
+      font-size: 15px;
+      line-height: 1.5;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      border: 1px solid #eee;
+      transition: background-color 0.2s;
+      cursor: pointer;
+      height: 100%;
+      min-height: 60px;
+      max-height: 220px;
+      width: 100%;
+    }
+
+    .fiv-ai-suggestion:hover {
+      background-color: #eef9f3;
+    }
+
+    .fiv-ai-suggestion-text {
+      flex: 1;
+      overflow-y: auto;
+      padding-right: 5px;
+    }
+
+    .fiv-ai-suggestion-placeholder {
+      padding: 20px;
+      background-color: #f5f5f5;
+      border-radius: 8px;
+      color: #62646a;
+      text-align: center;
+      width: 340px;
+      font-style: italic;
+    }
+
+    .fiv-ai-send-btn {
+      background-color: #1dbf73;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      padding: 8px 16px;
+      cursor: pointer;
+      font-size: 15px;
+      font-weight: 600;
+      transition: background-color 0.2s;
+      align-self: flex-end;
+    }
+
+    .fiv-ai-send-btn:hover {
+      background-color: #19a463;
+    }
+
+    .fiv-ai-prev, .fiv-ai-next {
+      position: absolute;
+      top: 50%;
+      transform: translateY(-50%);
+      background-color: #1dbf73;
+      color: white;
+      border: none;
+      border-radius: 50%;
+      width: 36px;
+      height: 36px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      font-size: 22px;
+      font-weight: bold;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+      transition: all 0.2s;
+      z-index: 20;
+      opacity: 0.95;
+      padding: 0;
+      line-height: 1;
+    }
+
+    .fiv-ai-prev {
+      left: -12px;
+    }
+
+    .fiv-ai-next {
+      right: -12px;
+    }
+
+    .fiv-ai-prev:hover, .fiv-ai-next:hover {
+      background-color: #19a463;
+      opacity: 1;
+      transform: translateY(-50%) scale(1.1);
+    }
+  `;
+  
+  document.head.appendChild(styleEl);
+}
 
 // Add event listeners to floating assistant
 function addFloatingAssistantListeners(assistant) {
-  // Close button with smooth animation
-  const closeBtn = assistant.querySelector('.fiv-ai-close');
-  if (closeBtn) {
-    closeBtn.addEventListener('click', () => {
-      assistant.classList.add('fiv-ai-closing');
-      // Wait for animation to complete before hiding
-      setTimeout(() => {
-        assistant.style.display = 'none';
-        assistant.classList.remove('fiv-ai-closing');
-      }, 300);
-    });
-  }
-  
-  // Minimize button with smooth animation
-  const minimizeBtn = assistant.querySelector('.fiv-ai-minimize');
-  if (minimizeBtn) {
-    minimizeBtn.addEventListener('click', () => {
-      const content = assistant.querySelector('.fiv-ai-content');
-      if (content) {
-        if (assistant.classList.contains('fiv-ai-minimized')) {
-          // Expand
-          minimizeBtn.textContent = '_';
-          minimizeBtn.title = 'Minimize';
-          assistant.classList.remove('fiv-ai-minimized');
-          content.style.display = 'block';
-          // Need to use setTimeout to make sure the transition works
-          setTimeout(() => {
-            content.style.maxHeight = content.scrollHeight + 'px';
-          }, 10);
-        } else {
-          // Minimize
-          minimizeBtn.textContent = '+';
-          minimizeBtn.title = 'Expand';
-          content.style.maxHeight = '0';
-          assistant.classList.add('fiv-ai-minimized');
-          // Hide content after animation completes
-          setTimeout(() => {
-            if (assistant.classList.contains('fiv-ai-minimized')) {
-              content.style.display = 'none';
-            }
-          }, 300);
-        }
-      }
-    });
-  }
+  // Since the minimize button is now handled directly in createFloatingAssistant
+  // we only need event listeners for other interactions
   
   // Suggestion click events
   assistant.addEventListener('click', (e) => {
@@ -405,63 +780,73 @@ function observeChatMessages() {
   // Process existing messages on page load
   setTimeout(() => {
     processExistingMessages();
-  }, 1000); // Wait for page to fully load before processing
+  }, 1000);
+  
+  // Track the last node count to avoid processing the same state multiple times
+  let lastNodeCount = 0;
+  // Track the last processed timestamp to prevent too-frequent processing
+  let lastProcessedTime = 0;
   
   // Create a new MutationObserver to detect message additions
   const observer = new MutationObserver((mutations) => {
-    // Filter to find message additions
-    const messageMutations = mutations.filter(mutation => {
-      // Check for nodes being added
-      if (mutation.type === 'childList' && mutation.addedNodes.length > 0) {
-        return true;
-      }
-      
-      // Check for attributes changing on message elements
-      if (mutation.type === 'attributes' && 
-          (mutation.target.classList.contains('message-content') || 
-           mutation.target.closest('.message-content'))) {
-        return true;
-      }
-      
-      // Check for character data changes in message content
-      if (mutation.type === 'characterData' && 
-          mutation.target.parentNode && 
-          (mutation.target.parentNode.classList.contains('message-content') || 
-           mutation.target.parentNode.closest('.message-content'))) {
-        return true;
-      }
-      
-      return false;
-    });
+    // Get current timestamp
+    const now = Date.now();
     
-    if (messageMutations.length > 0) {
-      console.log('Fiverr AI Assistant: Detected message changes, processing');
-      
-      // Wait for the DOM to settle before checking for new messages
-      clearTimeout(messageProcessingTimeout);
-      
-      messageProcessingTimeout = setTimeout(() => {
-        const buyerMessages = findBuyerMessages();
-        const sellerMessages = findSellerMessages();
-        
-        if (buyerMessages.length > 0) {
-          processBuyerMessages(buyerMessages);
-        }
-        
-        if (sellerMessages.length > 0) {
-          processSellerMessages(sellerMessages);
-        }
-      }, 500); // Half-second delay to let DOM settle
+    // Don't process again if it's been less than 300ms since last processing
+    if (now - lastProcessedTime < 300) {
+      return;
     }
+    
+    // Filter to find significant message additions
+    // We're looking for new nodes being added, not just attribute changes
+    const significantChanges = mutations.filter(mutation => 
+      mutation.type === 'childList' && mutation.addedNodes.length > 0
+    );
+    
+    if (significantChanges.length === 0) {
+      return; // No significant changes to process
+    }
+    
+    // Count the current number of message-like elements
+    const currentNodeCount = document.querySelectorAll('.message-content, .message-bubble, .message-text, [class*="message"]').length;
+    
+    // If node count hasn't changed, don't reprocess
+    if (currentNodeCount === lastNodeCount) {
+      return;
+    }
+    
+    lastNodeCount = currentNodeCount;
+    
+    console.log('Fiverr AI Assistant: Detected message changes, processing');
+    
+    // Wait for the DOM to settle before checking for new messages
+    clearTimeout(messageProcessingTimeout);
+    
+    messageProcessingTimeout = setTimeout(() => {
+      lastProcessedTime = Date.now();
+      
+      const buyerMessages = findBuyerMessages();
+      const sellerMessages = findSellerMessages();
+      
+      if (buyerMessages.length > 0) {
+        processBuyerMessages(buyerMessages);
+      }
+      
+      if (sellerMessages.length > 0) {
+        processSellerMessages(sellerMessages);
+      }
+    }, 500); // Half-second delay to let DOM settle
   });
   
   // Configure the observer to watch for changes to child elements and subtree
+  // Only watch for structural changes (childList), not attribute or text changes
   observer.observe(chatContainer, {
     childList: true,
-    subtree: true,
-    attributes: true,
-    characterData: true
+    subtree: true
   });
+  
+  // Store observer reference for cleanup
+  chatObserver = observer;
   
   console.log('Fiverr AI Assistant: Message observer set up successfully');
 }
@@ -925,7 +1310,8 @@ function senderType(sender) {
   return sender.includes('Buyer') ? 'Buyer' : 'You';
 }
 
-// Process a message with OpenAI API
+// Process a message with Google Gemini API through the background script
+// This is the correct way to make API calls in a Chrome extension - avoids CORS issues and security concerns
 async function processMessageWithAI(messageText) {
   if (!apiKey || !enableAI) return;
   
@@ -952,96 +1338,6 @@ async function processMessageWithAI(messageText) {
     console.error('Fiverr AI Assistant: Error processing message with AI', error);
     // Fall back to showing the original message
     updateAssistantWithMessage(messageText);
-  }
-}
-
-// Get simplified version of the message using OpenAI
-async function getSimplifiedMessage(messageText) {
-  try {
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`
-      },
-      body: JSON.stringify({
-        model: 'gpt-4o',
-        messages: [
-          {
-            role: 'system',
-            content: 'You are an assistant that simplifies complex messages into clear, concise English. Keep your response short and to the point.'
-          },
-          {
-            role: 'user',
-            content: `Simplify this message: "${messageText}"`
-          }
-        ],
-        max_tokens: 150
-      })
-    });
-    
-    const data = await response.json();
-    if (data.choices && data.choices[0] && data.choices[0].message) {
-      return data.choices[0].message.content.trim();
-    } else {
-      throw new Error('Invalid API response for message simplification');
-    }
-  } catch (error) {
-    console.error('Fiverr AI Assistant: Error getting simplified message', error);
-    throw error;
-  }
-}
-
-// Get reply options using OpenAI
-async function getReplyOptions(messageText) {
-  try {
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`
-      },
-      body: JSON.stringify({
-        model: 'gpt-4o',
-        messages: [
-          {
-            role: 'system',
-            content: 'You are a helpful assistant for a Fiverr freelancer. Generate 3 different professional reply options to the client\'s message. Each reply should be concise but effective, and have a different tone or approach. Return your response as a JSON object with an array of reply options.'
-          },
-          {
-            role: 'user',
-            content: `Generate 3 different reply options for this client message: "${messageText}". Return the responses in a JSON format with an array called "replies".`
-          }
-        ],
-        response_format: { "type": "json_object" },
-        max_tokens: 500
-      })
-    });
-    
-    const data = await response.json();
-    if (data.choices && data.choices[0] && data.choices[0].message) {
-      try {
-        // Parse the JSON response
-        const content = data.choices[0].message.content;
-        const parsedContent = JSON.parse(content);
-        
-        // Check if the parsed content has the expected format
-        if (parsedContent && parsedContent.replies && Array.isArray(parsedContent.replies)) {
-          return parsedContent.replies;
-        } else {
-          console.error('Fiverr AI Assistant: Unexpected response format from OpenAI', parsedContent);
-          return ['Sorry, I couldn\'t generate proper reply options.'];
-        }
-      } catch (parseError) {
-        console.error('Fiverr AI Assistant: Error parsing JSON response', parseError);
-        return ['Sorry, I couldn\'t generate proper reply options.'];
-      }
-    } else {
-      throw new Error('Invalid API response for reply options');
-    }
-  } catch (error) {
-    console.error('Fiverr AI Assistant: Error getting reply options', error);
-    throw error;
   }
 }
 
@@ -1122,16 +1418,20 @@ function updateAssistantWithAIResults(simplifiedMessage, replyOptions, originalM
     }
     
     // Make sure the assistant is visible and expanded
+    // Find and hide the restore button if visible
+    const restoreButton = document.getElementById('fiv-ai-restore-btn');
+    if (restoreButton) {
+      restoreButton.style.display = 'none';
+    }
+    
+    // Show and restore the assistant
     floatingAssistant.style.display = 'block';
+    floatingAssistant.classList.remove('fiv-ai-minimized');
+    
     const content = floatingAssistant.querySelector('.fiv-ai-content');
-    if (content && content.style.display === 'none') {
+    if (content) {
       content.style.display = 'block';
       content.style.maxHeight = content.scrollHeight + 'px';
-      floatingAssistant.classList.remove('fiv-ai-minimized');
-      const minimizeBtn = floatingAssistant.querySelector('.fiv-ai-minimize');
-      if (minimizeBtn) {
-        minimizeBtn.textContent = '_';
-      }
     }
     
     // Attract attention with a subtle animation
@@ -1173,8 +1473,21 @@ function updateAssistantWithMessage(messageText) {
       updateCarouselButtons(0);
     }
     
-    // Make sure the assistant is visible
+    // Find and hide the restore button if visible
+    const restoreButton = document.getElementById('fiv-ai-restore-btn');
+    if (restoreButton) {
+      restoreButton.style.display = 'none';
+    }
+    
+    // Show and restore the assistant
     floatingAssistant.style.display = 'block';
+    floatingAssistant.classList.remove('fiv-ai-minimized');
+    
+    const content = floatingAssistant.querySelector('.fiv-ai-content');
+    if (content) {
+      content.style.display = 'block';
+      content.style.maxHeight = content.scrollHeight + 'px';
+    }
     
     // Attract attention with a subtle animation
     floatingAssistant.classList.remove('fiv-ai-pulse');
@@ -1768,12 +2081,20 @@ function processBuyerMessages(messages) {
     const content = extractMessageContent(msg);
     
     if (content && content.trim()) {
+      // Check if we've already processed this message
+      const contentHash = hashString(content);
+      if (processedMessages.has(contentHash)) {
+        console.log('Fiverr AI Assistant: Skipping already processed buyer message');
+        return;
+      }
+      
       // Add message to processing queue
       messagesToProcess.push({
         sender: 'Buyer',
         content: content,
         buyerName: buyerName,
-        element: msg // Store the element reference for detecting latest message
+        element: msg, // Store the element reference for detecting latest message
+        contentHash: contentHash // Store hash for message tracking
       });
     }
   });
@@ -1801,11 +2122,15 @@ function processBuyerMessages(messages) {
       // Just show the message as-is without AI processing
       updateLatestMessage('Buyer', latestMessage.content);
     }
+    
+    // Mark the message as processed to prevent duplicates
+    processedMessages.add(latestMessage.contentHash);
   }
   
-  // Remove element references before storage
+  // Remove element references and hashes before storage
   messagesToProcess.forEach(msg => {
     delete msg.element;
+    delete msg.contentHash;
   });
   
   // Batch save all messages
@@ -1884,97 +2209,137 @@ function generateReplySuggestions(message) {
   // Skip if AI is disabled or no API key
   if (!enableAI || !apiKey) return;
   
-  console.log('Fiverr AI Assistant: Generating reply suggestions for buyer message');
+  // Create a hash of the message to track if it's been processed
+  const messageHash = hashString(message);
   
-  // Store the original message for display
-  const originalMessage = message;
-  
-  // Temporarily update the UI with "processing" status
-  const summaryElement = floatingAssistant.querySelector('.fiv-ai-summary-text');
-  if (summaryElement) {
-    summaryElement.innerHTML = `
-      <div class="fiv-ai-original-message">${originalMessage.length > 80 ? originalMessage.substring(0, 77) + '...' : originalMessage}</div>
-      <div class="fiv-ai-simplified"><em>Processing message...</em></div>
-    `;
+  // Don't process if message is already processed or currently being processed
+  if (processedMessages.has(messageHash) || (currentlyProcessingMessage === messageHash)) {
+    console.log('Fiverr AI Assistant: Skipping already processed message');
+    return;
   }
   
-  // Get recent conversation history for context
-  try {
-    chrome.storage.local.get(['chatHistory'], function(result) {
-      if (chrome.runtime.lastError) {
-        console.error('Fiverr AI Assistant: Error getting chat history', chrome.runtime.lastError);
-        handleExtensionError(originalMessage);
-        return;
-      }
-      
-      const chatHistory = result.chatHistory || [];
-      
-      // Find the current conversation ID using buyer name
-      const buyerName = findBuyerName();
-      const today = Math.floor(new Date().getTime() / 86400000); // Day-based timestamp
-      const conversationId = buyerName ? `${buyerName}:${today}` : null;
-      
-      // Get latest 10 messages from this conversation for context
-      let contextMessages = [];
-      
-      if (conversationId) {
-        contextMessages = chatHistory
-          .filter(msg => msg.conversationId === conversationId)
-          .sort((a, b) => a.timestamp - b.timestamp)
-          .slice(-10);
-        
-        console.log(`Fiverr AI Assistant: Found ${contextMessages.length} context messages for conversation with ${buyerName}`);
-      } else {
-        // If no conversation ID, just get the most recent messages as context
-        contextMessages = chatHistory
-          .sort((a, b) => a.timestamp - b.timestamp)
-          .slice(-10);
-        
-        console.log(`Fiverr AI Assistant: Using ${contextMessages.length} recent messages as context`);
-      }
-      
-      // Format context messages for the API
-      const formattedContext = contextMessages.map(msg => 
-        `${msg.sender}: ${msg.content}`
-      ).join('\n');
-      
-      // Use background script to handle API call with context
-      try {
-        chrome.runtime.sendMessage(
-          { 
-            action: 'processWithAI', 
-            text: message,
-            context: formattedContext
-          },
-          function(response) {
-            // Check if the extension context is still valid
-            if (chrome.runtime.lastError) {
-              console.error('Fiverr AI Assistant: Runtime error', chrome.runtime.lastError);
-              handleExtensionError(originalMessage);
-              return;
-            }
-            
-            if (response && response.success) {
-              updateAssistantWithAIResults(
-                response.data.simplifiedMessage, 
-                response.data.replyOptions,
-                originalMessage
-              );
-            } else {
-              console.error('Fiverr AI Assistant: API error', response?.error || 'Unknown error');
-              handleExtensionError(originalMessage);
-            }
-          }
-        );
-      } catch (error) {
-        console.error('Fiverr AI Assistant: Failed to send message to background script', error);
-        handleExtensionError(originalMessage);
-      }
-    });
-  } catch (error) {
-    console.error('Fiverr AI Assistant: Error getting chat history', error);
-    handleExtensionError(originalMessage);
+  // Clear any existing debounce timer
+  if (messageProcessingDebounceTimer) {
+    clearTimeout(messageProcessingDebounceTimer);
   }
+  
+  // Debounce message processing to prevent multiple rapid calls
+  messageProcessingDebounceTimer = setTimeout(() => {
+    // Mark this message as being processed
+    currentlyProcessingMessage = messageHash;
+    
+    console.log('Fiverr AI Assistant: Generating reply suggestions for buyer message');
+    
+    // Store the original message for display
+    const originalMessage = message;
+    
+    // Temporarily update the UI with "processing" status
+    const summaryElement = floatingAssistant?.querySelector('.fiv-ai-summary-text');
+    if (summaryElement) {
+      summaryElement.innerHTML = `
+        <div class="fiv-ai-original-message">${originalMessage.length > 80 ? originalMessage.substring(0, 77) + '...' : originalMessage}</div>
+        <div class="fiv-ai-simplified"><em>Processing message...</em></div>
+      `;
+    }
+    
+    // Get recent conversation history for context
+    try {
+      chrome.storage.local.get(['chatHistory'], function(result) {
+        if (chrome.runtime.lastError) {
+          console.error('Fiverr AI Assistant: Error getting chat history', chrome.runtime.lastError);
+          handleExtensionError(originalMessage);
+          currentlyProcessingMessage = null; // Reset processing state
+          return;
+        }
+        
+        const chatHistory = result.chatHistory || [];
+        
+        // Find the current conversation ID using buyer name
+        const buyerName = findBuyerName();
+        const today = Math.floor(new Date().getTime() / 86400000); // Day-based timestamp
+        const conversationId = buyerName ? `${buyerName}:${today}` : null;
+        
+        // Get latest 10 messages from this conversation for context
+        let contextMessages = [];
+        
+        if (conversationId) {
+          contextMessages = chatHistory
+            .filter(msg => msg.conversationId === conversationId)
+            .sort((a, b) => a.timestamp - b.timestamp)
+            .slice(-10);
+          
+          console.log(`Fiverr AI Assistant: Found ${contextMessages.length} context messages for conversation with ${buyerName}`);
+        } else {
+          // If no conversation ID, just get the most recent messages as context
+          contextMessages = chatHistory
+            .sort((a, b) => a.timestamp - b.timestamp)
+            .slice(-10);
+          
+          console.log(`Fiverr AI Assistant: Using ${contextMessages.length} recent messages as context`);
+        }
+        
+        // Format context messages for the API
+        const formattedContext = contextMessages.map(msg => 
+          `${msg.sender}: ${msg.content}`
+        ).join('\n');
+        
+        // Send to background script for API processing - this avoids CORS issues and keeps API calls in background
+        try {
+          chrome.runtime.sendMessage(
+            { 
+              action: 'processWithAI', 
+              text: message,
+              context: formattedContext
+            },
+            function(response) {
+              // Check if the extension context is still valid
+              if (chrome.runtime.lastError) {
+                console.error('Fiverr AI Assistant: Runtime error', chrome.runtime.lastError);
+                handleExtensionError(originalMessage);
+                currentlyProcessingMessage = null; // Reset processing state
+                return;
+              }
+              
+              if (response && response.success) {
+                updateAssistantWithAIResults(
+                  response.data.simplifiedMessage, 
+                  response.data.replyOptions,
+                  originalMessage
+                );
+                // Mark this message as processed
+                processedMessages.add(messageHash);
+              } else {
+                console.error('Fiverr AI Assistant: API error', response?.error || 'Unknown error');
+                handleExtensionError(originalMessage);
+              }
+              
+              // Clear the currently processing message flag
+              currentlyProcessingMessage = null;
+            }
+          );
+        } catch (error) {
+          console.error('Fiverr AI Assistant: Failed to send message to background script', error);
+          handleExtensionError(originalMessage);
+          currentlyProcessingMessage = null; // Reset processing state
+        }
+      });
+    } catch (error) {
+      console.error('Fiverr AI Assistant: Error getting chat history', error);
+      handleExtensionError(originalMessage);
+      currentlyProcessingMessage = null; // Reset processing state
+    }
+  }, 500); // 500ms debounce delay
+}
+
+// Simple string hash function to track processed messages
+function hashString(str) {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash; // Convert to 32bit integer
+  }
+  return hash;
 }
 
 // Handle extension errors gracefully
@@ -1997,279 +2362,10 @@ function handleExtensionError(originalMessage) {
   if (suggestionsContainer) {
     suggestionsContainer.innerHTML = `
       <div class="fiv-ai-suggestion-placeholder">
-        Unable to generate suggestions due to an extension error. Please reload the page or reinstall the extension.
+        Unable to generate suggestions due to an extension error. Please reload the page, check your Google Gemini API key, or reinstall the extension.
       </div>
     `;
   }
-}
-
-// Add required styles for the assistant
-function addAssistantStyles() {
-  const styleEl = document.createElement('style');
-  styleEl.id = 'fiv-ai-assistant-styles';
-  styleEl.textContent = `
-    /* Floating AI assistant styles */
-    .fiv-ai-floating-assistant {
-      position: fixed;
-      z-index: 9999;
-      width: 380px;
-      background-color: #fff;
-      border-radius: 8px;
-      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
-      font-family: 'Macan', 'Helvetica Neue', Helvetica, Arial, sans-serif;
-      font-size: 14px;
-      color: #404145;
-      overflow: hidden;
-      transition: opacity 0.3s, transform 0.3s;
-      display: none;
-    }
-
-    .fiv-ai-closing {
-      opacity: 0;
-      transform: scale(0.9);
-    }
-
-    .fiv-ai-pulse {
-      animation: fiv-ai-pulse-animation 1s;
-    }
-
-    @keyframes fiv-ai-pulse-animation {
-      0% { box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2); }
-      50% { box-shadow: 0 4px 25px rgba(29, 191, 115, 0.6); }
-      100% { box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2); }
-    }
-
-    .fiv-ai-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 16px 20px;
-      background-color: #1dbf73; /* Fiverr green */
-      color: white;
-      cursor: move;
-      font-weight: 600;
-      font-size: 16px;
-    }
-
-    .fiv-ai-controls {
-      display: flex;
-      gap: 10px;
-    }
-
-    .fiv-ai-controls button {
-      background: none;
-      border: none;
-      color: white;
-      font-size: 18px;
-      cursor: pointer;
-      width: 28px;
-      height: 28px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      border-radius: 4px;
-    }
-
-    .fiv-ai-controls button:hover {
-      background-color: rgba(255, 255, 255, 0.2);
-    }
-
-    .fiv-ai-content {
-      padding: 20px;
-      max-height: 500px;
-      transition: max-height 0.3s;
-      overflow: hidden;
-    }
-
-    .fiv-ai-minimized .fiv-ai-content {
-      max-height: 0;
-    }
-
-    .fiv-ai-message-summary {
-      margin-bottom: 20px;
-    }
-
-    .fiv-ai-message-summary h3 {
-      font-size: 18px;
-      margin: 0 0 12px 0;
-      color: #404145;
-      font-weight: 600;
-    }
-
-    .fiv-ai-summary-text {
-      background-color: #f5f5f5;
-      padding: 16px;
-      border-radius: 8px;
-      margin: 0;
-      font-size: 15px;
-      line-height: 1.5;
-      max-height: 200px;
-      overflow-y: auto;
-    }
-    
-    .fiv-ai-original-message {
-      margin-bottom: 12px;
-      padding-bottom: 10px;
-      border-bottom: 1px solid #ddd;
-      color: #62646a;
-      font-style: italic;
-      line-height: 1.5;
-    }
-    
-    .fiv-ai-simplified {
-      color: #404145;
-      line-height: 1.5;
-    }
-    
-    .fiv-ai-simplified strong {
-      color: #1dbf73;
-      font-weight: 600;
-    }
-    
-    .fiv-ai-summary-text strong {
-      color: #1dbf73;
-      font-weight: 600;
-    }
-    
-    .fiv-ai-summary-text em {
-      color: #62646a;
-      font-style: italic;
-    }
-
-    .fiv-ai-reply-options h3 {
-      font-size: 18px;
-      margin: 0 0 12px 0;
-      color: #404145;
-      font-weight: 600;
-    }
-
-    .fiv-ai-carousel-container {
-      position: relative;
-      width: 100%;
-      padding: 0 24px;
-    }
-
-    .fiv-ai-carousel {
-      width: 100%;
-      margin: 0 auto;
-      overflow-x: auto;
-      scroll-behavior: smooth;
-      scroll-snap-type: x mandatory;
-      scrollbar-width: thin;
-      scrollbar-color: #ddd #f5f5f5;
-      -webkit-overflow-scrolling: touch;
-      -ms-overflow-style: none;  /* Hide scrollbar IE and Edge */
-      scrollbar-width: none;  /* Hide scrollbar Firefox */
-    }
-    
-    .fiv-ai-carousel::-webkit-scrollbar {
-      display: none; /* Hide scrollbar Chrome, Safari, Opera */
-    }
-
-    .fiv-ai-suggestions {
-      display: flex;
-      gap: 15px;
-      padding: 5px 0;
-      width: 100%;
-    }
-
-    .fiv-ai-suggestion {
-      flex: 0 0 100%;
-      background-color: #f5f5f5;
-      border-radius: 8px;
-      padding: 16px;
-      font-size: 15px;
-      line-height: 1.5;
-      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-      border: 1px solid #eee;
-      transition: background-color 0.2s;
-      cursor: pointer;
-      height: 100%;
-      min-height: 60px;
-      max-height: 220px;
-      width: 100%;
-    }
-
-    .fiv-ai-suggestion:hover {
-      background-color: #eef9f3;
-    }
-
-    .fiv-ai-suggestion-text {
-      flex: 1;
-      overflow-y: auto;
-      padding-right: 5px;
-    }
-
-    .fiv-ai-suggestion-placeholder {
-      padding: 20px;
-      background-color: #f5f5f5;
-      border-radius: 8px;
-      color: #62646a;
-      text-align: center;
-      width: 340px;
-      font-style: italic;
-    }
-
-    .fiv-ai-send-btn {
-      background-color: #1dbf73;
-      color: white;
-      border: none;
-      border-radius: 4px;
-      padding: 8px 16px;
-      cursor: pointer;
-      font-size: 15px;
-      font-weight: 600;
-      transition: background-color 0.2s;
-      align-self: flex-end;
-    }
-
-    .fiv-ai-send-btn:hover {
-      background-color: #19a463;
-    }
-
-    .fiv-ai-prev, .fiv-ai-next {
-      position: absolute;
-      top: 50%;
-      transform: translateY(-50%);
-      background-color: #1dbf73;
-      color: white;
-      border: none;
-      border-radius: 50%;
-      width: 36px;
-      height: 36px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      cursor: pointer;
-      font-size: 22px;
-      font-weight: bold;
-      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-      transition: all 0.2s;
-      z-index: 20;
-      opacity: 0.95;
-      padding: 0;
-      line-height: 1;
-    }
-
-    .fiv-ai-prev {
-      left: -12px;
-    }
-
-    .fiv-ai-next {
-      right: -12px;
-    }
-
-    .fiv-ai-prev:hover, .fiv-ai-next:hover {
-      background-color: #19a463;
-      opacity: 1;
-      transform: translateY(-50%) scale(1.1);
-    }
-  `;
-  
-  document.head.appendChild(styleEl);
 }
 
 // Handle chat history button click

@@ -28,7 +28,7 @@ A Chrome extension that helps freelancers on Fiverr by providing AI-generated me
 ## Setup
 
 1. Click on the extension icon in your Chrome toolbar to open the popup
-2. Enter your OpenAI API key in the settings section
+2. Enter your Google Gemini API key in the settings section
 3. Make sure "Enable AI Features" is checked
 4. Click "Save Settings"
 
@@ -60,7 +60,7 @@ This extension:
 - Stores all data locally in your browser using Chrome Storage API
 - Sends message content to OpenAI's API for processing
 - Does not store your conversations on any external servers
-- Requires an OpenAI API key which is stored securely in Chrome's synced storage
+- Requires a Google Gemini API key which is stored securely in Chrome's synced storage
 
 ## Technologies Used
 
