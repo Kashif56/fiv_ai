@@ -119,7 +119,7 @@ function createFloatingAssistant() {
   
   assistant.innerHTML = `
     <div class="fiv-ai-header" id="fiv-ai-header">
-      <div>Fiverr AI Assistant</div>
+      <div>Fiverr AI</div>
       <div class="fiv-ai-controls">
         <button id="fiv-ai-history-btn" title="View Chat History">💬</button>
         <button id="fiv-ai-minimize-btn" title="Minimize">_</button>
