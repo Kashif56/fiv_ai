@@ -44,12 +44,34 @@ function initialize() {
 
 // Load settings from Chrome storage
 async function loadSettings() {
+  if (!isExtensionContextValid()) {
+    console.error('Fiverr AI Assistant: Cannot load settings, extension context invalidated');
+    return Promise.resolve();
+  }
+  
   return new Promise((resolve) => {
-    chrome.storage.sync.get(['apiKey', 'enableAI'], function(result) {
-      apiKey = result.apiKey || '';
-      enableAI = result.enableAI !== undefined ? result.enableAI : true;
+    try {
+      chrome.storage.sync.get(['apiKey', 'enableAI'], function(result) {
+        if (chrome.runtime.lastError) {
+          console.error('Fiverr AI Assistant: Error loading settings', chrome.runtime.lastError);
+          // Use default values if error occurs
+          apiKey = '';
+          enableAI = true;
+          resolve();
+          return;
+        }
+        
+        apiKey = result.apiKey || '';
+        enableAI = result.enableAI !== undefined ? result.enableAI : true;
+        resolve();
+      });
+    } catch (error) {
+      console.error('Fiverr AI Assistant: Exception loading settings', error);
+      // Use default values if error occurs
+      apiKey = '';
+      enableAI = true;
       resolve();
-    });
+    }
   });
 }
 
@@ -1461,60 +1483,73 @@ function batchSaveMessages(messages) {
   
   console.log(`Fiverr AI Assistant: Batch saving ${messages.length} messages`);
   
-  chrome.storage.local.get(['chatHistory'], function(result) {
-    let chatHistory = result.chatHistory || [];
-    const originalLength = chatHistory.length;
-    
-    // Process each message
-    let newMessagesAdded = 0;
-    
-    messages.forEach(msg => {
-      const { sender, content, buyerName } = msg;
+  try {
+    chrome.storage.local.get(['chatHistory'], function(result) {
+      if (chrome.runtime.lastError) {
+        console.error('Fiverr AI Assistant: Error getting chat history for batch save', chrome.runtime.lastError);
+        return;
+      }
       
-      // Create timestamp with slight offsets to keep order
-      const timestamp = new Date().getTime() - (messages.length - newMessagesAdded);
+      let chatHistory = result.chatHistory || [];
+      const originalLength = chatHistory.length;
       
-      // Check if this is a duplicate in the existing history
-      const isDuplicate = chatHistory.some(existingMsg => 
-        existingMsg.content.trim().toLowerCase() === content.trim().toLowerCase() && 
-        existingMsg.sender === sender
-      );
+      // Process each message
+      let newMessagesAdded = 0;
       
-      if (!isDuplicate) {
-        // Create message object
-        chatHistory.push({
-          sender: sender,
-          content: content,
-          timestamp: timestamp,
-          buyerName: buyerName || null, 
-          conversationId: buyerName ? `${buyerName}:${Math.floor(timestamp / 86400000)}` : null
-        });
+      messages.forEach(msg => {
+        const { sender, content, buyerName } = msg;
         
-        newMessagesAdded++;
-      }
-    });
-    
-    // Only save if we added new messages
-    if (newMessagesAdded > 0) {
-      console.log(`Fiverr AI Assistant: Adding ${newMessagesAdded} new messages to history`);
-      
-      // Limit history size
-      if (chatHistory.length > 200) {
-        chatHistory = chatHistory.slice(-200);
-      }
-      
-      // Save the updated history
-      chrome.storage.local.set({ chatHistory: chatHistory }, function() {
-        if (chrome.runtime.lastError) {
-          console.error('Fiverr AI Assistant: Error batch saving messages:', chrome.runtime.lastError);
-        } else {
-          console.log(`Fiverr AI Assistant: Successfully saved batch of messages. History grew from ${originalLength} to ${chatHistory.length}`);
+        // Create timestamp with slight offsets to keep order
+        const timestamp = new Date().getTime() - (messages.length - newMessagesAdded);
+        
+        // Check if this is a duplicate in the existing history
+        const isDuplicate = chatHistory.some(existingMsg => 
+          existingMsg.content.trim().toLowerCase() === content.trim().toLowerCase() && 
+          existingMsg.sender === sender
+        );
+        
+        if (!isDuplicate) {
+          // Create message object
+          chatHistory.push({
+            sender: sender,
+            content: content,
+            timestamp: timestamp,
+            buyerName: buyerName || null, 
+            conversationId: buyerName ? `${buyerName}:${Math.floor(timestamp / 86400000)}` : null
+          });
+          
+          newMessagesAdded++;
         }
       });
-    } else {
-      console.log('Fiverr AI Assistant: No new messages to add, all were duplicates');
-    }
-  });
+      
+      // Only save if we added new messages
+      if (newMessagesAdded > 0) {
+        console.log(`Fiverr AI Assistant: Adding ${newMessagesAdded} new messages to history`);
+        
+        // Limit history size
+        if (chatHistory.length > 200) {
+          chatHistory = chatHistory.slice(-200);
+        }
+        
+        // Save the updated history
+        try {
+          chrome.storage.local.set({ chatHistory: chatHistory }, function() {
+            if (chrome.runtime.lastError) {
+              console.error('Fiverr AI Assistant: Error batch saving messages:', chrome.runtime.lastError);
+            } else {
+              console.log(`Fiverr AI Assistant: Successfully saved batch of messages. History grew from ${originalLength} to ${chatHistory.length}`);
+            }
+          });
+        } catch (error) {
+          console.error('Fiverr AI Assistant: Error batch saving messages:', error);
+        }
+      } else {
+        console.log('Fiverr AI Assistant: No new messages to add, all were duplicates');
+      }
+    });
+  } catch (error) {
+    console.error('Fiverr AI Assistant: Error in batch save messages:', error);
+  }
 }
 
 // Find the buyer name from the page content
@@ -1602,49 +1637,89 @@ function findBuyerName() {
   return `Conversation-${new Date().toISOString().split('T')[0]}`;
 }
 
+// Check if extension context is still valid
+function isExtensionContextValid() {
+  try {
+    // If we can access chrome.runtime.id, the context is valid
+    return !!chrome.runtime.id;
+  } catch (e) {
+    console.error('Fiverr AI Assistant: Extension context invalidated', e);
+    return false;
+  }
+}
+
 // Function to initialize the extension
 function initializeExtension() {
-  console.log('Fiverr AI Assistant: Initializing extension');
-  
-  // Load settings
-  loadSettings();
-  
-  // Check if we're on a Fiverr message page
-  if (window.location.href.includes('fiverr.com')) {
-    console.log('Fiverr AI Assistant: On Fiverr website');
+  try {
+    console.log('Fiverr AI Assistant: Initializing extension');
     
-    // Create the floating assistant
-    createFloatingAssistant();
+    // Check if extension context is valid first
+    if (!isExtensionContextValid()) {
+      console.error('Fiverr AI Assistant: Cannot initialize, extension context invalidated');
+      return;
+    }
     
-    // Find and process existing messages on the page
-    processExistingMessages();
+    // Load settings
+    loadSettings();
     
-    // Ensure chat history is initialized properly
-    ensureChatHistoryInitialized();
-    
-    // Set up observers for new messages
-    observeChatMessages();
+    // Check if we're on a Fiverr message page
+    if (window.location.href.includes('fiverr.com')) {
+      console.log('Fiverr AI Assistant: On Fiverr website');
+      
+      // Create the floating assistant
+      createFloatingAssistant();
+      
+      // Find and process existing messages on the page
+      processExistingMessages();
+      
+      // Ensure chat history is initialized properly
+      ensureChatHistoryInitialized();
+      
+      // Set up observers for new messages
+      observeChatMessages();
+    }
+  } catch (error) {
+    console.error('Fiverr AI Assistant: Error initializing extension', error);
   }
 }
 
 // Ensure chat history is properly initialized
 function ensureChatHistoryInitialized(callback) {
-  chrome.storage.local.get(['chatHistory'], function(result) {
-    if (!result.chatHistory) {
-      console.log('Fiverr AI Assistant: Initializing empty chat history');
-      chrome.storage.local.set({ chatHistory: [] }, function() {
-        console.log('Fiverr AI Assistant: Empty chat history initialized');
+  if (!isExtensionContextValid()) {
+    console.error('Fiverr AI Assistant: Cannot initialize chat history, extension context invalidated');
+    return;
+  }
+  
+  try {
+    chrome.storage.local.get(['chatHistory'], function(result) {
+      if (chrome.runtime.lastError) {
+        console.error('Fiverr AI Assistant: Error checking chat history initialization', chrome.runtime.lastError);
+        return;
+      }
+      
+      if (!result.chatHistory) {
+        console.log('Fiverr AI Assistant: Initializing empty chat history');
+        chrome.storage.local.set({ chatHistory: [] }, function() {
+          if (chrome.runtime.lastError) {
+            console.error('Fiverr AI Assistant: Error initializing chat history', chrome.runtime.lastError);
+            return;
+          }
+          
+          console.log('Fiverr AI Assistant: Empty chat history initialized');
+          if (callback && typeof callback === 'function') {
+            callback();
+          }
+        });
+      } else {
+        console.log('Fiverr AI Assistant: Chat history exists with', result.chatHistory.length, 'messages');
         if (callback && typeof callback === 'function') {
           callback();
         }
-      });
-    } else {
-      console.log('Fiverr AI Assistant: Chat history exists with', result.chatHistory.length, 'messages');
-      if (callback && typeof callback === 'function') {
-        callback();
       }
-    }
-  });
+    });
+  } catch (error) {
+    console.error('Fiverr AI Assistant: Error in ensureChatHistoryInitialized', error);
+  }
 }
 
 // Run when DOM is loaded
@@ -1824,77 +1899,108 @@ function generateReplySuggestions(message) {
   }
   
   // Get recent conversation history for context
-  chrome.storage.local.get(['chatHistory'], function(result) {
-    const chatHistory = result.chatHistory || [];
-    
-    // Find the current conversation ID using buyer name
-    const buyerName = findBuyerName();
-    const today = Math.floor(new Date().getTime() / 86400000); // Day-based timestamp
-    const conversationId = buyerName ? `${buyerName}:${today}` : null;
-    
-    // Get latest 10 messages from this conversation for context
-    let contextMessages = [];
-    
-    if (conversationId) {
-      contextMessages = chatHistory
-        .filter(msg => msg.conversationId === conversationId)
-        .sort((a, b) => a.timestamp - b.timestamp)
-        .slice(-10);
-      
-      console.log(`Fiverr AI Assistant: Found ${contextMessages.length} context messages for conversation with ${buyerName}`);
-    } else {
-      // If no conversation ID, just get the most recent messages as context
-      contextMessages = chatHistory
-        .sort((a, b) => a.timestamp - b.timestamp)
-        .slice(-10);
-      
-      console.log(`Fiverr AI Assistant: Using ${contextMessages.length} recent messages as context`);
-    }
-    
-    // Format context messages for the API
-    const formattedContext = contextMessages.map(msg => 
-      `${msg.sender}: ${msg.content}`
-    ).join('\n');
-    
-    // Use background script to handle API call with context
-    chrome.runtime.sendMessage(
-      { 
-        action: 'processWithAI', 
-        text: message,
-        context: formattedContext
-      },
-      function(response) {
-        if (response && response.success) {
-          updateAssistantWithAIResults(
-            response.data.simplifiedMessage, 
-            response.data.replyOptions,
-            originalMessage
-          );
-        } else {
-          console.error('Fiverr AI Assistant: API error', response?.error || 'Unknown error');
-          
-          let summaryElement = floatingAssistant.querySelector('.fiv-ai-summary-text');
-          // Show error in summary area
-          if (summaryElement) {
-            summaryElement.innerHTML = `
-              <div class="fiv-ai-original-message">${originalMessage.length > 80 ? originalMessage.substring(0, 77) + '...' : originalMessage}</div>
-              <div class="fiv-ai-simplified"><strong>Error:</strong> Could not process message with AI. Check your API key.</div>
-            `;
-          }
-          
-          // Just show a placeholder in the suggestions area
-          const suggestionsContainer = floatingAssistant.querySelector('.fiv-ai-suggestions');
-          if (suggestionsContainer) {
-            suggestionsContainer.innerHTML = `
-              <div class="fiv-ai-suggestion-placeholder">
-                Unable to generate suggestions. Please check your API key.
-              </div>
-            `;
-          }
-        }
+  try {
+    chrome.storage.local.get(['chatHistory'], function(result) {
+      if (chrome.runtime.lastError) {
+        console.error('Fiverr AI Assistant: Error getting chat history', chrome.runtime.lastError);
+        handleExtensionError(originalMessage);
+        return;
       }
-    );
-  });
+      
+      const chatHistory = result.chatHistory || [];
+      
+      // Find the current conversation ID using buyer name
+      const buyerName = findBuyerName();
+      const today = Math.floor(new Date().getTime() / 86400000); // Day-based timestamp
+      const conversationId = buyerName ? `${buyerName}:${today}` : null;
+      
+      // Get latest 10 messages from this conversation for context
+      let contextMessages = [];
+      
+      if (conversationId) {
+        contextMessages = chatHistory
+          .filter(msg => msg.conversationId === conversationId)
+          .sort((a, b) => a.timestamp - b.timestamp)
+          .slice(-10);
+        
+        console.log(`Fiverr AI Assistant: Found ${contextMessages.length} context messages for conversation with ${buyerName}`);
+      } else {
+        // If no conversation ID, just get the most recent messages as context
+        contextMessages = chatHistory
+          .sort((a, b) => a.timestamp - b.timestamp)
+          .slice(-10);
+        
+        console.log(`Fiverr AI Assistant: Using ${contextMessages.length} recent messages as context`);
+      }
+      
+      // Format context messages for the API
+      const formattedContext = contextMessages.map(msg => 
+        `${msg.sender}: ${msg.content}`
+      ).join('\n');
+      
+      // Use background script to handle API call with context
+      try {
+        chrome.runtime.sendMessage(
+          { 
+            action: 'processWithAI', 
+            text: message,
+            context: formattedContext
+          },
+          function(response) {
+            // Check if the extension context is still valid
+            if (chrome.runtime.lastError) {
+              console.error('Fiverr AI Assistant: Runtime error', chrome.runtime.lastError);
+              handleExtensionError(originalMessage);
+              return;
+            }
+            
+            if (response && response.success) {
+              updateAssistantWithAIResults(
+                response.data.simplifiedMessage, 
+                response.data.replyOptions,
+                originalMessage
+              );
+            } else {
+              console.error('Fiverr AI Assistant: API error', response?.error || 'Unknown error');
+              handleExtensionError(originalMessage);
+            }
+          }
+        );
+      } catch (error) {
+        console.error('Fiverr AI Assistant: Failed to send message to background script', error);
+        handleExtensionError(originalMessage);
+      }
+    });
+  } catch (error) {
+    console.error('Fiverr AI Assistant: Error getting chat history', error);
+    handleExtensionError(originalMessage);
+  }
+}
+
+// Handle extension errors gracefully
+function handleExtensionError(originalMessage) {
+  if (!floatingAssistant) return;
+  
+  console.log('Fiverr AI Assistant: Handling extension error');
+  
+  let summaryElement = floatingAssistant.querySelector('.fiv-ai-summary-text');
+  // Show error in summary area
+  if (summaryElement) {
+    summaryElement.innerHTML = `
+      <div class="fiv-ai-original-message">${originalMessage.length > 80 ? originalMessage.substring(0, 77) + '...' : originalMessage}</div>
+      <div class="fiv-ai-simplified"><strong>Error:</strong> Extension error occurred. Please reload the page.</div>
+    `;
+  }
+  
+  // Just show a placeholder in the suggestions area
+  const suggestionsContainer = floatingAssistant.querySelector('.fiv-ai-suggestions');
+  if (suggestionsContainer) {
+    suggestionsContainer.innerHTML = `
+      <div class="fiv-ai-suggestion-placeholder">
+        Unable to generate suggestions due to an extension error. Please reload the page or reinstall the extension.
+      </div>
+    `;
+  }
 }
 
 // Add required styles for the assistant

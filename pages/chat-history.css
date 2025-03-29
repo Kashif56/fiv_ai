@@ -1,24 +1,31 @@
 /* Chat History CSS */
-
+@import url('https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@0,100..900;1,100..900&display=swap');
 * {
   margin: 0;
   padding: 0;
   box-sizing: border-box;
 }
 
+
+
 body {
-  font-family: 'Macan', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  font-family: 'Macan', 'Montserrat', Arial, sans-serif;
+  font-weight: 600;
   background-color: #f7f7f7;
   color: #404145;
   padding: 20px;
+  line-height: 1.5;
+  font-size: 16px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 .container {
   max-width: 1200px;
   margin: 0 auto;
   background-color: #fff;
-  border-radius: 8px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+  border-radius: 4px;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
   overflow: hidden;
   height: calc(100vh - 40px);
   display: flex;
@@ -26,17 +33,19 @@ body {
 }
 
 .header {
-  padding: 20px;
-  background-color: #1dbf73; /* Fiverr green */
+  padding: 16px 24px;
+  background-color: #1dbf73; /* Fiverr primary green */
   color: white;
   display: flex;
   justify-content: space-between;
   align-items: center;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
 }
 
 .header h1 {
-  font-size: 24px;
+  font-size: 20px;
   font-weight: 600;
+  letter-spacing: -0.5px;
 }
 
 .controls {
@@ -46,24 +55,27 @@ body {
 
 .btn {
   background-color: #fff;
-  color: #1dbf73;
+  color: #222325;
   border: none;
-  padding: 10px 18px;
+  padding: 8px 16px;
   border-radius: 4px;
   cursor: pointer;
   font-weight: 600;
   font-size: 14px;
   transition: all 0.2s ease;
+  letter-spacing: -0.1px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .btn:hover {
-  background-color: #f0f0f0;
-  transform: translateY(-2px);
-  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+  background-color: #f5f5f5;
+  transform: translateY(-1px);
 }
 
 .btn.danger {
-  color: #ff5252;
+  color: #f74040;
 }
 
 .btn.danger:hover {
@@ -86,9 +98,54 @@ body {
 /* Conversation list styles */
 .conversation-list-container {
   width: 320px;
-  border-right: 1px solid #efeff0;
+  border-right: 1px solid #dadbdd;
   overflow-y: auto;
-  background-color: #fafafa;
+  background-color: #ffffff;
+}
+
+.search-container {
+  padding: 16px 24px;
+  border-bottom: 1px solid #dadbdd;
+  position: sticky;
+  top: 0;
+  background-color: #ffffff;
+  z-index: 10;
+}
+
+.search-box {
+  position: relative;
+  width: 100%;
+}
+
+.search-icon {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #74767e;
+  font-size: 14px;
+}
+
+#search-conversations {
+  width: 100%;
+  padding: 10px 16px 10px 36px;
+  border: 1px solid #dadbdd;
+  border-radius: 4px;
+  font-size: 14px;
+  color: #222325;
+  background-color: #ffffff;
+  transition: border-color 0.2s ease;
+  font-family: 'Macan', 'Montserrat', Arial, sans-serif;
+}
+
+#search-conversations:focus {
+  outline: none;
+  border-color: #1dbf73;
+  box-shadow: 0 0 0 2px rgba(29, 191, 115, 0.1);
+}
+
+#search-conversations::placeholder {
+  color: #95979d;
 }
 
 .conversation-list {
@@ -97,7 +154,7 @@ body {
 }
 
 .conversation-item {
-  padding: 16px;
+  padding: 16px 24px;
   border-bottom: 1px solid #efeff0;
   cursor: pointer;
   transition: all 0.2s ease;
@@ -108,20 +165,21 @@ body {
 }
 
 .conversation-item.active {
-  background-color: #e6f7ef;
+  background-color: #f0fdf6;
   border-left: 3px solid #1dbf73;
 }
 
 .conversation-name {
   font-weight: 600;
-  font-size: 16px;
+  font-size: 15px;
   margin-bottom: 6px;
-  color: #404145;
+  color: #222325;
+  letter-spacing: -0.1px;
 }
 
 .conversation-preview {
   font-size: 14px;
-  color: #62646a;
+  color: #74767e;
   margin-bottom: 6px;
   white-space: nowrap;
   overflow: hidden;
@@ -140,47 +198,63 @@ body {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  background-color: #ffffff;
 }
 
 .conversation-header {
-  padding: 16px;
+  padding: 16px 24px;
   border-bottom: 1px solid #efeff0;
-  background-color: #f7f7f7;
+  background-color: #ffffff;
 }
 
 .conversation-header h2 {
-  font-size: 18px;
-  color: #404145;
+  font-size: 16px;
+  color: #222325;
   font-weight: 600;
+  letter-spacing: -0.1px;
 }
 
 .messages-container {
   flex: 1;
   overflow-y: auto;
-  padding: 20px;
+  padding: 24px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 16px;
+  background-color: #f5f5f5;
 }
 
 .no-conversation-selected {
   display: flex;
+  flex-direction: column;
   justify-content: center;
   align-items: center;
   height: 100%;
-  color: #62646a;
-  font-size: 16px;
+  color: #74767e;
+  font-size: 15px;
   text-align: center;
   padding: 20px;
+  background-color: #fafafa;
+}
+
+.no-conversation-selected i {
+  font-size: 48px;
+  margin-bottom: 16px;
+  color: #dadbdd;
+}
+
+.no-conversation-selected p {
+  max-width: 240px;
+  line-height: 1.5;
 }
 
 .message-item {
   padding: 16px;
-  border-radius: 12px;
-  max-width: 85%;
+  border-radius: 8px;
+  max-width: 80%;
   position: relative;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-  margin-bottom: 10px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  margin-bottom: 8px;
   transition: transform 0.2s ease;
   width: fit-content;
 }
@@ -190,45 +264,44 @@ body {
 }
 
 .message-item:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.1);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
 }
 
 .message-item.buyer {
-  background-color: #f5f5f5;
+  background-color: #ffffff;
   align-self: flex-start;
-  border-top-left-radius: 4px;
-  border-left: 3px solid #4a89dc;
+  border-bottom-left-radius: 2px;
 }
 
 .message-item.seller {
-  background-color: #e6f7ef;
+  background-color: #eff6fc;
   align-self: flex-end;
-  border-top-right-radius: 4px;
-  border-right: 3px solid #1dbf73;
+  border-bottom-right-radius: 2px;
 }
 
 .message-sender {
   font-weight: 600;
-  margin-bottom: 8px;
-  font-size: 14px;
-  color: #404145;
+  margin-bottom: 6px;
+  font-size: 13px;
+  color: #222325;
   display: flex;
   align-items: center;
+  letter-spacing: -0.1px;
 }
 
 .message-sender::before {
   content: '';
   display: inline-block;
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
-  margin-right: 8px;
+  margin-right: 6px;
   flex-shrink: 0;
 }
 
 .buyer .message-sender::before {
-  background-color: #4a89dc;
+  background-color: #4a73e8;
 }
 
 .seller .message-sender::before {
@@ -236,82 +309,51 @@ body {
 }
 
 .message-content {
-  font-size: 15px;
-  line-height: 1.5;
+  font-size: 14px;
+  line-height: 1.6;
   word-break: break-word;
   white-space: pre-wrap;
+  color: #404145;
 }
 
 .message-time {
-  font-size: 12px;
+  font-size: 11px;
   color: #95979d;
-  margin-top: 10px;
+  margin-top: 8px;
   text-align: right;
 }
 
 .date-separator {
-  display: flex;
-  align-items: center;
-  margin: 20px 0;
   position: relative;
-}
-
-.date-separator:first-child {
-  margin-top: 0;
+  text-align: center;
+  margin: 20px 0;
+  height: 12px;
 }
 
 .date-separator:before {
-  content: '';
-  flex-grow: 1;
+  content: "";
   height: 1px;
+  width: 100%;
   background-color: #efeff0;
-  margin-right: 16px;
-}
-
-.date-separator:after {
-  content: '';
-  flex-grow: 1;
-  height: 1px;
-  background-color: #efeff0;
-  margin-left: 16px;
+  position: absolute;
+  top: 50%;
+  left: 0;
 }
 
 .date-text {
-  background-color: #ffffff;
-  padding: 6px 12px;
-  border-radius: 16px;
-  font-size: 13px;
-  color: #62646a;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-  font-weight: 600;
-}
-
-.no-messages {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
-  color: #62646a;
-  text-align: center;
-  padding: 30px;
-}
-
-.no-messages:before {
-  content: "💬";
-  font-size: 48px;
-  margin-bottom: 16px;
+  display: inline-block;
+  background-color: #f5f5f5;
+  padding: 0 12px;
+  position: relative;
+  font-size: 12px;
+  color: #95979d;
 }
 
 .footer {
-  padding: 14px 20px;
-  background-color: #f7f7f7;
-  border-top: 1px solid #efeff0;
+  padding: 16px 24px;
+  border-top: 1px solid #dadbdd;
+  background-color: #fafafa;
+  color: #74767e;
   font-size: 13px;
-  color: #62646a;
   text-align: center;
-}
-
-.footer p {
-  margin: 0;
 } 
