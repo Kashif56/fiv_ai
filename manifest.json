@@ -8,14 +8,14 @@
     "scripting"
   ],
   "host_permissions": [
-    "https://*.fiverr.com/*"
+    "https://*.fiverr.com/inbox/*"
   ],
   "action": {
     "default_popup": "popup/popup.html"
   },
   "content_scripts": [
     {
-      "matches": ["https://*.fiverr.com/*"],
+      "matches": ["https://*.fiverr.com/inbox/*"],
       "js": ["content/content.js"],
       "css": ["content/content.css"]
     }

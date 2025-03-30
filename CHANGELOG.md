@@ -56,6 +56,9 @@ All notable changes to the AI Chat Assistant for Fiverr will be documented in th
 - Fixed minimize functionality issues causing the button not to respond
 - Improved minimize/restore UI transition and positioning
 - Fixed issue where assistant box remained visible after minimizing
+- Fixed close button functionality to properly and permanently close the assistant
+- Enhanced error handling for "Extension context invalidated" errors with detailed user guidance
+- Added multiple validation checks throughout message processing workflow to properly handle extension context issues
 
 ## [1.0.0] - Initial Release
 

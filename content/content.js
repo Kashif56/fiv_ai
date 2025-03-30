@@ -25,8 +25,28 @@ function initialize() {
   if (window.location.hostname.includes('fiverr.com')) {
     const assistant = createFloatingAssistant();
     if (assistant) {
-      // Show it
-      assistant.style.display = 'block';
+      // Check if the assistant was manually closed by the user
+      let wasManuallyClosed = false;
+      
+      // Check local storage first
+      try {
+        wasManuallyClosed = localStorage.getItem('fiv-ai-assistant-closed') === 'true';
+      } catch (error) {
+        console.error('Fiverr AI Assistant: Error reading closed state from storage', error);
+      }
+      
+      // Also check window variable (for same-session persistence)
+      if (window.fivAssistantManuallyClosed) {
+        wasManuallyClosed = true;
+      }
+      
+      // Only show if not manually closed
+      if (!wasManuallyClosed) {
+        console.log('Fiverr AI Assistant: Showing assistant (not manually closed)');
+        assistant.style.display = 'block';
+      } else {
+        console.log('Fiverr AI Assistant: Assistant was manually closed, not showing');
+      }
     }
   }
   
@@ -237,6 +257,14 @@ function createFloatingAssistant() {
     e.stopPropagation(); // Prevent event bubbling
     console.log('Restore button clicked');
     
+    // Reset the manually closed state
+    window.fivAssistantManuallyClosed = false;
+    try {
+      localStorage.removeItem('fiv-ai-assistant-closed');
+    } catch (error) {
+      console.error('Fiverr AI Assistant: Error removing closed state', error);
+    }
+    
     // Hide restore button
     restoreButton.style.display = 'none';
     
@@ -267,14 +295,44 @@ function createFloatingAssistant() {
   // Add close button functionality
   const closeBtn = document.getElementById('fiv-ai-close-btn');
   if (closeBtn) {
-    closeBtn.addEventListener('click', function() {
+    // Remove any existing event listeners to prevent duplicates
+    const newCloseBtn = closeBtn.cloneNode(true);
+    closeBtn.parentNode.replaceChild(newCloseBtn, closeBtn);
+    
+    // Add fresh event listener
+    newCloseBtn.addEventListener('click', function(e) {
+      e.stopPropagation(); // Prevent event bubbling
+      console.log('Close button clicked');
+      
+      // Add closing animation class
       assistant.classList.add('fiv-ai-closing');
+      
+      // Hide assistant and restore button after animation completes
       setTimeout(() => {
+        console.log('Hiding assistant completely');
         assistant.style.display = 'none';
         assistant.classList.remove('fiv-ai-closing');
+        
         // Also hide restore button if it's visible
-        restoreButton.style.display = 'none';
+        const restoreButton = document.getElementById('fiv-ai-restore-btn');
+        if (restoreButton) {
+          restoreButton.style.display = 'none';
+        }
+        
+        // Clear any minimized state
+        assistant.classList.remove('fiv-ai-minimized');
       }, 300);
+      
+      // Prevent auto-showing of the assistant 
+      // Set a flag to indicate the assistant was manually closed
+      window.fivAssistantManuallyClosed = true;
+      
+      // Store the closed state in local storage for persistence
+      try {
+        localStorage.setItem('fiv-ai-assistant-closed', 'true');
+      } catch (error) {
+        console.error('Fiverr AI Assistant: Error storing closed state', error);
+      }
     });
   }
   
@@ -932,45 +990,71 @@ function isMessageInHistory(sender, content) {
       return;
     }
     
+    // Check if extension context is valid before proceeding
+    if (!isExtensionContextValid()) {
+      console.error('Fiverr AI Assistant: Cannot check message history, extension context invalidated');
+      resolve(false); // Safer to assume it's not a duplicate if we can't verify
+      return;
+    }
+    
     // Clean the content for comparison
     const cleanedContent = cleanMessageText(content).trim().toLowerCase();
     
-    chrome.storage.local.get(['chatHistory'], function(result) {
-      const chatHistory = result.chatHistory || [];
-      
-      // For very short messages, only check for exact matches
-      if (cleanedContent.length < 20) {
-        const isDuplicate = chatHistory.some(msg => 
-          msg.content.trim().toLowerCase() === cleanedContent && 
-          msg.sender === sender
-        );
-        resolve(isDuplicate);
-        return;
-      }
-      
-      // For longer messages, check for similarity to handle minor differences
-      for (const msg of chatHistory) {
-        if (msg.sender !== sender) continue;
-        
-        const existingContent = msg.content.trim().toLowerCase();
-        
-        // Exact match
-        if (existingContent === cleanedContent) {
-          resolve(true);
+    try {
+      chrome.storage.local.get(['chatHistory'], function(result) {
+        // Check if we got a runtime error
+        if (chrome.runtime.lastError) {
+          console.error('Fiverr AI Assistant: Error getting chat history', chrome.runtime.lastError);
+          resolve(false); // Safer to assume it's not a duplicate if we can't verify
           return;
         }
         
-        // Check similarity for longer messages
-        // const similarity = calculateSimilarity(existingContent, cleanedContent);
-        // if (similarity > 0.85) { // 85% similarity threshold
-        //   console.log(`Fiverr AI Assistant: Found similar message with ${Math.round(similarity*100)}% similarity`);
-        //   resolve(true);
-        //   return;
-        // }
-      }
-      
-      resolve(false);
-    });
+        // Check again if extension context is still valid
+        if (!isExtensionContextValid()) {
+          console.error('Fiverr AI Assistant: Extension context invalidated during message history check');
+          resolve(false);
+          return;
+        }
+        
+        const chatHistory = result.chatHistory || [];
+        
+        // For very short messages, only check for exact matches
+        if (cleanedContent.length < 20) {
+          const isDuplicate = chatHistory.some(msg => 
+            msg.content.trim().toLowerCase() === cleanedContent && 
+            msg.sender === sender
+          );
+          resolve(isDuplicate);
+          return;
+        }
+        
+        // For longer messages, check for similarity to handle minor differences
+        for (const msg of chatHistory) {
+          if (msg.sender !== sender) continue;
+          
+          const existingContent = msg.content.trim().toLowerCase();
+          
+          // Exact match
+          if (existingContent === cleanedContent) {
+            resolve(true);
+            return;
+          }
+          
+          // Check similarity for longer messages
+          // const similarity = calculateSimilarity(existingContent, cleanedContent);
+          // if (similarity > 0.85) { // 85% similarity threshold
+          //   console.log(`Fiverr AI Assistant: Found similar message with ${Math.round(similarity*100)}% similarity`);
+          //   resolve(true);
+          //   return;
+          // }
+        }
+        
+        resolve(false);
+      });
+    } catch (error) {
+      console.error('Fiverr AI Assistant: Error checking message history', error);
+      resolve(false); // Safer to assume it's not a duplicate if we encounter an error
+    }
   });
 }
 
@@ -1352,6 +1436,15 @@ function updateAssistantWithAIResults(simplifiedMessage, replyOptions, originalM
     console.log('Fiverr AI Assistant: Updating assistant with AI results');
     console.log('Fiverr AI Assistant: Simplified message:', simplifiedMessage);
     
+    // Check if assistant was manually closed
+    let wasManuallyClosed = false;
+    try {
+      wasManuallyClosed = localStorage.getItem('fiv-ai-assistant-closed') === 'true' || window.fivAssistantManuallyClosed === true;
+    } catch (error) {
+      console.error('Fiverr AI Assistant: Error checking closed state', error);
+    }
+    
+    // Always update the content even if not shown
     // Update summary section with original and simplified message
     const summaryElement = floatingAssistant.querySelector('.fiv-ai-summary-text');
     if (summaryElement) {
@@ -1417,28 +1510,32 @@ function updateAssistantWithAIResults(simplifiedMessage, replyOptions, originalM
       setupCarouselButtons();
     }
     
-    // Make sure the assistant is visible and expanded
-    // Find and hide the restore button if visible
-    const restoreButton = document.getElementById('fiv-ai-restore-btn');
-    if (restoreButton) {
-      restoreButton.style.display = 'none';
+    // Only show and restore if not manually closed
+    if (!wasManuallyClosed) {
+      // Find and hide the restore button if visible
+      const restoreButton = document.getElementById('fiv-ai-restore-btn');
+      if (restoreButton) {
+        restoreButton.style.display = 'none';
+      }
+      
+      // Show and restore the assistant
+      floatingAssistant.style.display = 'block';
+      floatingAssistant.classList.remove('fiv-ai-minimized');
+      
+      const content = floatingAssistant.querySelector('.fiv-ai-content');
+      if (content) {
+        content.style.display = 'block';
+        content.style.maxHeight = content.scrollHeight + 'px';
+      }
+      
+      // Attract attention with a subtle animation
+      floatingAssistant.classList.remove('fiv-ai-pulse');
+      setTimeout(() => {
+        floatingAssistant.classList.add('fiv-ai-pulse');
+      }, 10);
+    } else {
+      console.log('Fiverr AI Assistant: Not showing assistant due to manual close by user');
     }
-    
-    // Show and restore the assistant
-    floatingAssistant.style.display = 'block';
-    floatingAssistant.classList.remove('fiv-ai-minimized');
-    
-    const content = floatingAssistant.querySelector('.fiv-ai-content');
-    if (content) {
-      content.style.display = 'block';
-      content.style.maxHeight = content.scrollHeight + 'px';
-    }
-    
-    // Attract attention with a subtle animation
-    floatingAssistant.classList.remove('fiv-ai-pulse');
-    setTimeout(() => {
-      floatingAssistant.classList.add('fiv-ai-pulse');
-    }, 10);
   } catch (error) {
     console.error('Fiverr AI Assistant: Error updating assistant with AI results', error);
   }
@@ -1454,6 +1551,15 @@ function updateAssistantWithMessage(messageText) {
   try {
     console.log('Fiverr AI Assistant: Updating assistant with original message');
     
+    // Check if assistant was manually closed
+    let wasManuallyClosed = false;
+    try {
+      wasManuallyClosed = localStorage.getItem('fiv-ai-assistant-closed') === 'true' || window.fivAssistantManuallyClosed === true;
+    } catch (error) {
+      console.error('Fiverr AI Assistant: Error checking closed state', error);
+    }
+    
+    // Always update the content even if not shown
     // Update summary
     const summaryElement = floatingAssistant.querySelector('.fiv-ai-summary-text');
     if (summaryElement) {
@@ -1473,27 +1579,32 @@ function updateAssistantWithMessage(messageText) {
       updateCarouselButtons(0);
     }
     
-    // Find and hide the restore button if visible
-    const restoreButton = document.getElementById('fiv-ai-restore-btn');
-    if (restoreButton) {
-      restoreButton.style.display = 'none';
+    // Only show and restore if not manually closed
+    if (!wasManuallyClosed) {
+      // Find and hide the restore button if visible
+      const restoreButton = document.getElementById('fiv-ai-restore-btn');
+      if (restoreButton) {
+        restoreButton.style.display = 'none';
+      }
+      
+      // Show and restore the assistant
+      floatingAssistant.style.display = 'block';
+      floatingAssistant.classList.remove('fiv-ai-minimized');
+      
+      const content = floatingAssistant.querySelector('.fiv-ai-content');
+      if (content) {
+        content.style.display = 'block';
+        content.style.maxHeight = content.scrollHeight + 'px';
+      }
+      
+      // Attract attention with a subtle animation
+      floatingAssistant.classList.remove('fiv-ai-pulse');
+      setTimeout(() => {
+        floatingAssistant.classList.add('fiv-ai-pulse');
+      }, 10);
+    } else {
+      console.log('Fiverr AI Assistant: Not showing assistant due to manual close by user');
     }
-    
-    // Show and restore the assistant
-    floatingAssistant.style.display = 'block';
-    floatingAssistant.classList.remove('fiv-ai-minimized');
-    
-    const content = floatingAssistant.querySelector('.fiv-ai-content');
-    if (content) {
-      content.style.display = 'block';
-      content.style.maxHeight = content.scrollHeight + 'px';
-    }
-    
-    // Attract attention with a subtle animation
-    floatingAssistant.classList.remove('fiv-ai-pulse');
-    setTimeout(() => {
-      floatingAssistant.classList.add('fiv-ai-pulse');
-    }, 10);
   } catch (error) {
     console.error('Fiverr AI Assistant: Error updating assistant with message', error);
   }
@@ -1796,10 +1907,23 @@ function batchSaveMessages(messages) {
   
   console.log(`Fiverr AI Assistant: Batch saving ${messages.length} messages`);
   
+  // Check if extension context is valid before proceeding
+  if (!isExtensionContextValid()) {
+    console.error('Fiverr AI Assistant: Cannot save messages, extension context invalidated');
+    return;
+  }
+  
   try {
     chrome.storage.local.get(['chatHistory'], function(result) {
+      // Check for runtime errors
       if (chrome.runtime.lastError) {
         console.error('Fiverr AI Assistant: Error getting chat history for batch save', chrome.runtime.lastError);
+        return;
+      }
+      
+      // Check again if extension context is still valid
+      if (!isExtensionContextValid()) {
+        console.error('Fiverr AI Assistant: Extension context invalidated during batch save');
         return;
       }
       
@@ -1842,6 +1966,12 @@ function batchSaveMessages(messages) {
         // Limit history size
         if (chatHistory.length > 200) {
           chatHistory = chatHistory.slice(-200);
+        }
+        
+        // Check again if extension context is still valid before saving
+        if (!isExtensionContextValid()) {
+          console.error('Fiverr AI Assistant: Extension context invalidated before saving chat history');
+          return;
         }
         
         // Save the updated history
@@ -2062,6 +2192,15 @@ function processBuyerMessages(messages) {
   
   console.log(`Fiverr AI Assistant: Processing ${messages.length} buyer messages`);
   
+  // Check if extension context is valid before proceeding
+  if (!isExtensionContextValid()) {
+    console.error('Fiverr AI Assistant: Cannot process buyer messages, extension context invalidated');
+    
+    // Show error message in the assistant
+    handleExtensionError("Could not process buyer messages due to extension context invalidation");
+    return;
+  }
+  
   // Try to find the buyer name/conversation ID from the page
   const buyerName = findBuyerName();
   
@@ -2117,7 +2256,17 @@ function processBuyerMessages(messages) {
     
     // Generate reply suggestions if AI is enabled
     if (enableAI && apiKey) {
-      generateReplySuggestions(latestMessage.content);
+      try {
+        // Check again if extension context is still valid before calling AI processing
+        if (!isExtensionContextValid()) {
+          throw new Error('Extension context invalidated before generating reply suggestions');
+        }
+        
+        generateReplySuggestions(latestMessage.content);
+      } catch (error) {
+        console.error('Fiverr AI Assistant: Error generating reply suggestions', error);
+        handleExtensionError(latestMessage.content);
+      }
     } else {
       // Just show the message as-is without AI processing
       updateLatestMessage('Buyer', latestMessage.content);
@@ -2125,6 +2274,12 @@ function processBuyerMessages(messages) {
     
     // Mark the message as processed to prevent duplicates
     processedMessages.add(latestMessage.contentHash);
+  }
+  
+  // Don't try to save messages if extension context is invalid
+  if (!isExtensionContextValid()) {
+    console.error('Fiverr AI Assistant: Cannot save messages, extension context invalidated');
+    return;
   }
   
   // Remove element references and hashes before storage
@@ -2135,7 +2290,11 @@ function processBuyerMessages(messages) {
   
   // Batch save all messages
   if (messagesToProcess.length > 0) {
-    batchSaveMessages(messagesToProcess);
+    try {
+      batchSaveMessages(messagesToProcess);
+    } catch (error) {
+      console.error('Fiverr AI Assistant: Error during batch save messages', error);
+    }
   }
 }
 
@@ -2225,6 +2384,13 @@ function generateReplySuggestions(message) {
   
   // Debounce message processing to prevent multiple rapid calls
   messageProcessingDebounceTimer = setTimeout(() => {
+    // Check if extension context is still valid before proceeding
+    if (!isExtensionContextValid()) {
+      console.error('Fiverr AI Assistant: Cannot generate reply suggestions, extension context invalidated');
+      handleExtensionError(message);
+      return;
+    }
+    
     // Mark this message as being processed
     currentlyProcessingMessage = messageHash;
     
@@ -2244,11 +2410,23 @@ function generateReplySuggestions(message) {
     
     // Get recent conversation history for context
     try {
+      if (!isExtensionContextValid()) {
+        throw new Error('Extension context invalidated');
+      }
+      
       chrome.storage.local.get(['chatHistory'], function(result) {
         if (chrome.runtime.lastError) {
           console.error('Fiverr AI Assistant: Error getting chat history', chrome.runtime.lastError);
           handleExtensionError(originalMessage);
           currentlyProcessingMessage = null; // Reset processing state
+          return;
+        }
+        
+        // Check again if extension context is still valid
+        if (!isExtensionContextValid()) {
+          console.error('Fiverr AI Assistant: Extension context invalidated during chat history retrieval');
+          handleExtensionError(originalMessage);
+          currentlyProcessingMessage = null;
           return;
         }
         
@@ -2285,6 +2463,11 @@ function generateReplySuggestions(message) {
         
         // Send to background script for API processing - this avoids CORS issues and keeps API calls in background
         try {
+          // Check again if extension context is still valid
+          if (!isExtensionContextValid()) {
+            throw new Error('Extension context invalidated before sending message to background');
+          }
+          
           chrome.runtime.sendMessage(
             { 
               action: 'processWithAI', 
@@ -2348,12 +2531,24 @@ function handleExtensionError(originalMessage) {
   
   console.log('Fiverr AI Assistant: Handling extension error');
   
+  let errorMessage = 'An error occurred. Please reload the page.';
+  let errorDetails = 'Try reloading the page, checking your Google Gemini API key, or reinstalling the extension.';
+  
+  // Check if it's a context invalidation error
+  try {
+    chrome.runtime.id;
+  } catch (e) {
+    // This is definitely a context invalidation error
+    errorMessage = 'Extension context has been invalidated.';
+    errorDetails = 'This typically happens after the browser was updated or the extension was reloaded. Please reload this page to restore functionality.';
+  }
+  
   let summaryElement = floatingAssistant.querySelector('.fiv-ai-summary-text');
   // Show error in summary area
   if (summaryElement) {
     summaryElement.innerHTML = `
-      <div class="fiv-ai-original-message">${originalMessage.length > 80 ? originalMessage.substring(0, 77) + '...' : originalMessage}</div>
-      <div class="fiv-ai-simplified"><strong>Error:</strong> Extension error occurred. Please reload the page.</div>
+      <div class="fiv-ai-original-message">${originalMessage?.length > 80 ? originalMessage.substring(0, 77) + '...' : originalMessage || 'Message processing failed'}</div>
+      <div class="fiv-ai-simplified"><strong>Error:</strong> ${errorMessage}</div>
     `;
   }
   
@@ -2362,9 +2557,20 @@ function handleExtensionError(originalMessage) {
   if (suggestionsContainer) {
     suggestionsContainer.innerHTML = `
       <div class="fiv-ai-suggestion-placeholder">
-        Unable to generate suggestions due to an extension error. Please reload the page, check your Google Gemini API key, or reinstall the extension.
+        <strong>Extension Error:</strong> ${errorDetails}
       </div>
     `;
+  }
+  
+  // Show the assistant to make the error visible
+  if (floatingAssistant.style.display === 'none') {
+    floatingAssistant.style.display = 'block';
+    
+    // Add subtle attention animation
+    floatingAssistant.classList.remove('fiv-ai-pulse');
+    setTimeout(() => {
+      floatingAssistant.classList.add('fiv-ai-pulse');
+    }, 10);
   }
 }
 
