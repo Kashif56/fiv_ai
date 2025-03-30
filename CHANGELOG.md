@@ -17,6 +17,13 @@ All notable changes to the AI Chat Assistant for Fiverr will be documented in th
 - Button to access chat history from main UI
 - Dark/light mode detection and theme adaptation
 - Clearer empty states for the extension
+- Added categorized reply suggestions with 6 predefined scenarios:
+  - Price increase responses
+  - Scope explanation responses
+  - Timeline extension responses
+  - Positive interaction responses
+  - Technical clarification responses
+  - Revision request responses
 
 ### Changed
 - Improved message simplification prompt to focus on explaining what the client is saying and what they want the freelancer to do
@@ -44,6 +51,7 @@ All notable changes to the AI Chat Assistant for Fiverr will be documented in th
   - Direct API calls to Google Gemini 1.5 Pro
   - Updated UI references
 - Improved minimize functionality including a restore button when assistant is minimized
+- Redesigned reply suggestions to use a categorized approach with predefined scenarios instead of generic replies
 
 ### Fixed
 - Fixed "ReferenceError: contextString is not defined" bug in the background script

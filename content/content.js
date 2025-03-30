@@ -464,7 +464,7 @@ function addAssistantStyles() {
 
     .fiv-ai-content {
       padding: 20px;
-      max-height: 500px;
+      max-height: 600px; /* Increased height to accommodate the scenario selector */
       transition: all 0.3s ease-in-out;
       overflow: hidden;
     }
@@ -540,7 +540,6 @@ function addAssistantStyles() {
     .fiv-ai-carousel-container {
       position: relative;
       width: 100%;
-      padding: 0 24px;
     }
 
     .fiv-ai-carousel {
@@ -589,6 +588,46 @@ function addAssistantStyles() {
 
     .fiv-ai-suggestion:hover {
       background-color: #eef9f3;
+    }
+    
+    /* Scenario selector styles */
+    .fiv-ai-scenario-selector {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 16px;
+      width: 100%;
+    }
+    
+    .fiv-ai-scenario-btn {
+      background-color: #f5f5f5;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      padding: 8px 12px;
+      font-size: 13px;
+      color: #404145;
+      cursor: pointer;
+      transition: all 0.2s;
+      white-space: nowrap;
+      flex: 1 1 auto;
+      min-width: fit-content;
+    }
+    
+    .fiv-ai-scenario-btn:hover {
+      background-color: #eef9f3;
+      border-color: #1dbf73;
+    }
+    
+    .fiv-ai-scenario-btn.fiv-ai-active {
+      background-color: #1dbf73;
+      color: white;
+      border-color: #1dbf73;
+      font-weight: 500;
+    }
+    
+    .fiv-ai-suggestion-display {
+      width: 100%;
+      margin-top: 8px;
     }
 
     .fiv-ai-suggestion-text {
@@ -673,14 +712,9 @@ function addFloatingAssistantListeners(assistant) {
   
   // Suggestion click events
   assistant.addEventListener('click', (e) => {
-    if (e.target.classList.contains('fiv-ai-suggestion')) {
-      // Scroll the suggestion into view
-      e.target.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
-    }
-    
-    // Send button click handler
+    // Send button click handler (now works with scenario-based suggestions)
     if (e.target.classList.contains('fiv-ai-send-btn')) {
-      const suggestionText = e.target.parentElement.querySelector('.fiv-ai-suggestion-text').textContent;
+      const suggestionText = e.target.parentElement.querySelector('.fiv-ai-suggestion-text')?.textContent;
       
       if (suggestionText) {
         // Try to find and fill Fiverr's message input
@@ -709,20 +743,13 @@ function addFloatingAssistantListeners(assistant) {
       }
     }
     
-    // Direct click handlers for navigation buttons
-    if (e.target.classList.contains('fiv-ai-prev')) {
-      const carousel = assistant.querySelector('.fiv-ai-carousel');
-      if (carousel) {
-        const containerWidth = carousel.clientWidth;
-        carousel.scrollBy({ left: -containerWidth, behavior: 'smooth' });
-      }
-    }
+    // Handle scenario button clicks (already handled by inline event listeners)
     
-    if (e.target.classList.contains('fiv-ai-next')) {
-      const carousel = assistant.querySelector('.fiv-ai-carousel');
-      if (carousel) {
-        const containerWidth = carousel.clientWidth;
-        carousel.scrollBy({ left: containerWidth, behavior: 'smooth' });
+    // Focus on a suggestion when it's clicked
+    if (e.target.closest('.fiv-ai-suggestion')) {
+      const suggestionElement = e.target.closest('.fiv-ai-suggestion');
+      if (suggestionElement) {
+        suggestionElement.focus();
       }
     }
   });
@@ -1476,16 +1503,66 @@ function updateAssistantWithAIResults(simplifiedMessage, replyOptions, originalM
           </div>
         `;
       } else {
-        // Create each suggestion as a separate carousel item with consistent structure
-        validOptions.forEach((reply, index) => {
+        // Create scenario selector
+        const scenarioSelector = document.createElement('div');
+        scenarioSelector.className = 'fiv-ai-scenario-selector';
+        suggestionsContainer.appendChild(scenarioSelector);
+        
+        // Parse categorized options
+        validOptions.forEach((option, index) => {
+          // Extract category and content
+          let category = '';
+          let content = option;
+          
+          // Check if option starts with "CATEGORY:"
+          if (option.startsWith('CATEGORY:')) {
+            const colonIndex = option.indexOf(':');
+            const newlineIndex = option.indexOf('\n');
+            
+            if (colonIndex !== -1 && newlineIndex !== -1) {
+              category = option.substring(colonIndex + 1, newlineIndex).trim();
+              content = option.substring(newlineIndex + 1).trim();
+            }
+          }
+          
+          // Create scenario button
+          const scenarioBtn = document.createElement('button');
+          scenarioBtn.className = 'fiv-ai-scenario-btn';
+          scenarioBtn.textContent = category || `Option ${index + 1}`;
+          scenarioBtn.dataset.index = index;
+          scenarioBtn.addEventListener('click', function() {
+            // Remove active class from all buttons
+            document.querySelectorAll('.fiv-ai-scenario-btn').forEach(btn => {
+              btn.classList.remove('fiv-ai-active');
+            });
+            
+            // Add active class to clicked button
+            this.classList.add('fiv-ai-active');
+            
+            // Show the corresponding suggestion
+            showScenarioSuggestion(content, index);
+          });
+          
+          // Add to selector
+          scenarioSelector.appendChild(scenarioBtn);
+        });
+        
+        // Create container for the active suggestion
+        const suggestionDisplay = document.createElement('div');
+        suggestionDisplay.className = 'fiv-ai-suggestion-display';
+        suggestionsContainer.appendChild(suggestionDisplay);
+        
+        // Function to show a specific scenario suggestion
+        function showScenarioSuggestion(content, index) {
+          suggestionDisplay.innerHTML = '';
+          
           const suggestionElement = document.createElement('div');
           suggestionElement.className = 'fiv-ai-suggestion';
-          suggestionElement.style.scrollSnapAlign = 'start';
           
           // Add suggestion text in its own container
           const suggestionText = document.createElement('div');
           suggestionText.className = 'fiv-ai-suggestion-text';
-          suggestionText.textContent = reply;
+          suggestionText.textContent = content;
           
           // Add send button
           const sendButton = document.createElement('button');
@@ -1496,18 +1573,15 @@ function updateAssistantWithAIResults(simplifiedMessage, replyOptions, originalM
           // Build the element in the correct hierarchy
           suggestionElement.appendChild(suggestionText);
           suggestionElement.appendChild(sendButton);
-          suggestionsContainer.appendChild(suggestionElement);
-        });
+          suggestionDisplay.appendChild(suggestionElement);
+        }
+        
+        // Show the first suggestion by default
+        const firstBtn = scenarioSelector.querySelector('.fiv-ai-scenario-btn');
+        if (firstBtn) {
+          firstBtn.click();
+        }
       }
-
-      // Reset carousel scroll to beginning
-      const carousel = floatingAssistant.querySelector('.fiv-ai-carousel');
-      if (carousel) {
-        carousel.scrollLeft = 0;
-      }
-      
-      // Set up carousel buttons with event handlers
-      setupCarouselButtons();
     }
     
     // Only show and restore if not manually closed

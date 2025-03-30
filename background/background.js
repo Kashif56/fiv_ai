@@ -134,13 +134,42 @@ ${contextString}`;
         const simplifiedMessage = simplifiedResponse.candidates[0].content.parts[0].text.trim();
         
         // Construct the prompt for reply options
-        const replyPrompt = `You are a helpful assistant for a Fiverr freelancer. Generate 3 different professional reply options to the client's message. Each reply should be casual, friendly, and impactful. Keep responses concise (2-4 sentences max) but make them effective and warm. Separate the options with |||. Consider the conversation context when crafting responses.
+        const replyPrompt = `You are a helpful assistant for a Fiverr freelancer. I need you to categorize the client's message and generate appropriate reply options for the following 6 predefined scenarios. Format your response exactly as shown below with "CATEGORY: title" followed by a suggested reply for that category.
 
-Generate 3 different casual and friendly reply options for this conversation context. Make them short but impactful:
-${contextString}`;
+The 6 predefined scenarios are:
+1. PRICE INCREASE - If the client is discussing or requesting changes that would require additional cost
+2. SCOPE EXPLANATION - If the client is asking for clarification about what is included in the current scope
+3. TIMELINE EXTENSION - If the client's request would require additional time beyond the current deadline
+4. POSITIVE RESPONSE - A friendly, enthusiastic reply for general positive interactions
+5. TECHNICAL CLARIFICATION - If the client is asking technical questions about how something will work
+6. REVISION REQUEST - If the client is asking for changes or revisions to delivered work
+
+For each scenario, provide a concise, professional reply of 2-3 sentences. Each reply should be practical and directly usable by the freelancer.
+
+Client's message and context:
+${contextString}
+
+Response format:
+CATEGORY: Price Increase
+[Your reply for price increase scenario]
+|||
+CATEGORY: Scope Explanation
+[Your reply for scope explanation scenario]
+|||
+CATEGORY: Timeline Extension
+[Your reply for timeline extension scenario]
+|||
+CATEGORY: Positive Response
+[Your reply for positive interaction scenario]
+|||
+CATEGORY: Technical Clarification
+[Your reply for technical question scenario]
+|||
+CATEGORY: Revision Request
+[Your reply for revision request scenario]`;
         
         // Get reply options from Gemini
-        const replyResponse = await genAIInstance.generateContent(replyPrompt, { maxOutputTokens: 500 });
+        const replyResponse = await genAIInstance.generateContent(replyPrompt, { maxOutputTokens: 800 });
         
         if (!replyResponse || !replyResponse.candidates || replyResponse.candidates.length === 0) {
           console.error('Fiverr AI Assistant (Background): Invalid response from Gemini API during reply generation');
@@ -151,11 +180,11 @@ ${contextString}`;
         const replyText = replyResponse.candidates[0].content.parts[0].text.trim();
         
         // Split the response into separate reply options
-        let replyOptions = replyText.split('|||').map(reply => reply.trim());
+        const options = replyText.split('|||').map(reply => reply.trim());
         
-        // Make sure we have at least one valid reply
-        if (replyOptions.length === 0 || (replyOptions.length === 1 && replyOptions[0] === '')) {
-          replyOptions = ['I apologize, but I was unable to generate reply suggestions.'];
+        // Ensure we have at least one option
+        if (options.length === 0 || (options.length === 1 && options[0] === '')) {
+          options = ['I apologize, but I don\'t have a specific response prepared. How else can I assist you with your request?'];
         }
         
         // Return both the simplified message and reply options
@@ -163,7 +192,7 @@ ${contextString}`;
           success: true,
           data: {
             simplifiedMessage: simplifiedMessage,
-            replyOptions: replyOptions
+            replyOptions: options
           }
         });
       } catch (error) {
@@ -278,14 +307,43 @@ async function getReplyOptions(text, apiKey, recentMessages = []) {
       contextString = `Client message: "${text}"`;
     }
     
-    // Construct the prompt for reply options
-    const replyPrompt = `You are a helpful assistant for a Fiverr freelancer. Generate 3 different professional reply options to the client's message. Each reply should be casual, friendly, and impactful. Keep responses concise (2-4 sentences max) but make them effective and warm. Separate the options with |||. Consider the conversation context when crafting responses.
+    // Construct the prompt for categorized reply options
+    const replyPrompt = `You are a helpful assistant for a Fiverr freelancer. I need you to categorize the client's message and generate appropriate reply options for the following 6 predefined scenarios. Format your response exactly as shown below with "CATEGORY: title" followed by a suggested reply for that category.
 
-Generate 3 different casual and friendly reply options for this conversation context. Make them short but impactful:
-${contextString}`;
+The 6 predefined scenarios are:
+1. PRICE INCREASE - If the client is discussing or requesting changes that would require additional cost
+2. SCOPE EXPLANATION - If the client is asking for clarification about what is included in the current scope
+3. TIMELINE EXTENSION - If the client's request would require additional time beyond the current deadline
+4. POSITIVE RESPONSE - A friendly, enthusiastic reply for general positive interactions
+5. TECHNICAL CLARIFICATION - If the client is asking technical questions about how something will work
+6. REVISION REQUEST - If the client is asking for changes or revisions to delivered work
+
+For each scenario, provide a concise, professional reply of 2-3 sentences. Each reply should be practical and directly usable by the freelancer.
+
+Client's message and context:
+${contextString}
+
+Response format:
+CATEGORY: Price Increase
+[Your reply for price increase scenario]
+|||
+CATEGORY: Scope Explanation
+[Your reply for scope explanation scenario]
+|||
+CATEGORY: Timeline Extension
+[Your reply for timeline extension scenario]
+|||
+CATEGORY: Positive Response
+[Your reply for positive interaction scenario]
+|||
+CATEGORY: Technical Clarification
+[Your reply for technical question scenario]
+|||
+CATEGORY: Revision Request
+[Your reply for revision request scenario]`;
     
     // Get reply options from Gemini
-    const replyResponse = await genAIInstance.generateContent(replyPrompt, { maxOutputTokens: 500 });
+    const replyResponse = await genAIInstance.generateContent(replyPrompt, { maxOutputTokens: 800 });
     
     if (!replyResponse || !replyResponse.candidates || replyResponse.candidates.length === 0) {
       throw new Error('Invalid response from Gemini API during reply generation');
@@ -298,7 +356,7 @@ ${contextString}`;
     
     // Ensure we have at least one option
     if (options.length === 0 || (options.length === 1 && options[0] === '')) {
-      return ['I apologize, but I don\'t have a specific response prepared. How else can I assist you with your request?'];
+      options = ['I apologize, but I don\'t have a specific response prepared. How else can I assist you with your request?'];
     }
     
     return options;
